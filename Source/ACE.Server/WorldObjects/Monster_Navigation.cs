@@ -444,10 +444,26 @@ namespace ACE.Server.WorldObjects
             // Calculate raw speed (with scale logic)
             MoveSpeed = moveSpeed * RunRate;
 
-            // Cap: never faster than 800 run at 1.0 scale
-            var maxMoveSpeed = moveSpeed * (18.0f / 4.0f); // 4.5 is the capped RunRate
-            if (MoveSpeed > maxMoveSpeed)
-                MoveSpeed = maxMoveSpeed;
+                // Cap: never faster than 800 run at 1.0 scale
+    var maxMoveSpeed = moveSpeed * (18.0f / 4.0f); // 4.5 is the capped RunRate
+    if (MoveSpeed > maxMoveSpeed)
+        MoveSpeed = maxMoveSpeed;
+
+    // NEW: Monster speed cap - prevent monsters from being unreasonably fast
+    if (this is Creature creature && !(this is Player))
+    {
+        var maxMonsterSpeed = 15.0f; // Adjust this value as needed
+        var originalSpeed = MoveSpeed;
+        if (MoveSpeed > maxMonsterSpeed)
+        {
+            Console.WriteLine($"[SPEED_CAP] {Name} - Speed capped: {originalSpeed:F2} → {maxMonsterSpeed:F2} (was {((originalSpeed / maxMonsterSpeed) * 100):F0}% over limit)");
+            MoveSpeed = maxMonsterSpeed;
+        }
+        else
+        {
+            Console.WriteLine($"[SPEED_CAP] {Name} - Speed OK: {MoveSpeed:F2} (under {maxMonsterSpeed:F2} limit)");
+        }
+    }
         }
 
         /// <summary>
