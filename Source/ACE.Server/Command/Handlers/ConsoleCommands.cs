@@ -6,6 +6,7 @@ using ACE.Server.Managers;
 using ACE.Server.Network;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace ACE.Server.Command.Handlers
 {
@@ -51,6 +52,222 @@ namespace ACE.Server.Command.Handlers
                 Console.WriteLine(task);
             }
             Console.WriteLine("End ReadOnlyQueueReport");
+        }
+
+        [CommandHandler("dbperf", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Show database performance statistics and timing analysis")]
+        public static void ShowDatabasePerformance(Session session, params string[] parameters)
+        {
+            try
+            {
+                var report = DatabaseManager.Shard.GetPerformanceReport();
+                Console.WriteLine(report);
+                
+                // Also show current queue status
+                var queueCount = DatabaseManager.Shard.QueueCount;
+                Console.WriteLine($"\nCurrent Database Queue Status:");
+                Console.WriteLine($"Active tasks in queue: {queueCount}");
+                
+                if (queueCount > 0)
+                {
+                    var queueReport = DatabaseManager.Shard.QueueReport();
+                    Console.WriteLine("Tasks waiting in queue:");
+                    foreach (var task in queueReport.Take(10)) // Show first 10 tasks
+                    {
+                        Console.WriteLine($"  - {task}");
+                    }
+                    if (queueReport.Count > 10)
+                    {
+                        Console.WriteLine($"  ... and {queueReport.Count - 10} more tasks");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting database performance report: {ex.Message}");
+            }
+        }
+
+        [CommandHandler("dbperf-clear", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Clear database performance statistics")]
+        public static void ClearDatabasePerformance(Session session, params string[] parameters)
+        {
+            try
+            {
+                DatabaseManager.Shard.ClearPerformanceStats();
+                Console.WriteLine("Database performance statistics cleared.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error clearing database performance statistics: {ex.Message}");
+            }
+        }
+
+        [CommandHandler("dbqueue-wait", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Show current database queue wait time")]
+        public static void ShowDatabaseQueueWait(Session session, params string[] parameters)
+        {
+            try
+            {
+                var queueCount = DatabaseManager.Shard.QueueCount;
+                Console.WriteLine($"Current database queue count: {queueCount}");
+                
+                if (queueCount > 0)
+                {
+                    DatabaseManager.Shard.GetCurrentQueueWaitTime(result =>
+                    {
+                        Console.WriteLine($"Estimated wait time for new tasks: {result.TotalMilliseconds:F1}ms");
+                    });
+                }
+                else
+                {
+                    Console.WriteLine("Database queue is empty - no wait time.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting database queue wait time: {ex.Message}");
+            }
+        }
+
+        [CommandHandler("dbthreads", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Show database worker thread status and performance")]
+        public static void ShowDatabaseThreads(Session session, params string[] parameters)
+        {
+            try
+            {
+                Console.WriteLine("=== DATABASE WORKER THREAD STATUS ===");
+                
+                // Get current queue status
+                var queueCount = DatabaseManager.Shard.QueueCount;
+                var readOnlyQueueCount = DatabaseManager.Shard.ReadOnlyQueueCount;
+                
+                Console.WriteLine($"Write Queue: {queueCount} tasks waiting");
+                Console.WriteLine($"Read Queue: {readOnlyQueueCount} tasks waiting");
+                Console.WriteLine();
+                
+                // Show performance report
+                var report = DatabaseManager.Shard.GetPerformanceReport();
+                Console.WriteLine(report);
+                
+                // Show current queue contents
+                if (queueCount > 0)
+                {
+                    Console.WriteLine("\n=== WRITE QUEUE CONTENTS ===");
+                    var queueReport = DatabaseManager.Shard.QueueReport();
+                    foreach (var task in queueReport.Take(10))
+                    {
+                        Console.WriteLine($"  - {task}");
+                    }
+                    if (queueReport.Count > 10)
+                    {
+                        Console.WriteLine($"  ... and {queueReport.Count - 10} more tasks");
+                    }
+                }
+                
+                if (readOnlyQueueCount > 0)
+                {
+                    Console.WriteLine("\n=== READ QUEUE CONTENTS ===");
+                    var readOnlyQueueReport = DatabaseManager.Shard.ReadOnlyQueueReport();
+                    foreach (var task in readOnlyQueueReport.Take(10))
+                    {
+                        Console.WriteLine($"  - {task}");
+                    }
+                    if (readOnlyQueueReport.Count > 10)
+                    {
+                        Console.WriteLine($"  ... and {readOnlyQueueReport.Count - 10} more tasks");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting database thread status: {ex.Message}");
+            }
+        }
+
+        [CommandHandler("bank-usage", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Show bank command usage statistics for the last hour")]
+        public static void ShowBankUsage(Session session, params string[] parameters)
+        {
+            try
+            {
+                var oneHourAgo = DateTime.UtcNow.AddHours(-1);
+                var logFilePath = "logs/ACE.log"; // Adjust path if needed
+                
+                if (!System.IO.File.Exists(logFilePath))
+                {
+                    Console.WriteLine($"Log file not found at: {logFilePath}");
+                    Console.WriteLine("Please check your log4net configuration for the correct log file path.");
+                    return;
+                }
+                
+                var bankUsageLines = new List<string>();
+                var uniquePlayers = new HashSet<string>();
+                var uniqueAccounts = new HashSet<uint>();
+                var totalUsage = 0;
+                
+                // Read log file and parse bank usage entries
+                foreach (var line in System.IO.File.ReadLines(logFilePath))
+                {
+                    if (line.Contains("[BANK_USAGE]") && line.Contains("UTC"))
+                    {
+                        // Parse timestamp from log line
+                        var timestampMatch = System.Text.RegularExpressions.Regex.Match(line, @"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) UTC");
+                        if (timestampMatch.Success)
+                        {
+                            if (DateTime.TryParse(timestampMatch.Groups[1].Value, out var logTime))
+                            {
+                                if (logTime >= oneHourAgo)
+                                {
+                                    bankUsageLines.Add(line);
+                                    totalUsage++;
+                                    
+                                    // Extract player name and account ID
+                                    var playerMatch = System.Text.RegularExpressions.Regex.Match(line, @"Player: ([^(]+) \(Account: (\d+)\)");
+                                    if (playerMatch.Success)
+                                    {
+                                        uniquePlayers.Add(playerMatch.Groups[1].Value.Trim());
+                                        if (uint.TryParse(playerMatch.Groups[2].Value, out var accountId))
+                                        {
+                                            uniqueAccounts.Add(accountId);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                Console.WriteLine("=== BANK COMMAND USAGE STATISTICS (Last Hour) ===");
+                Console.WriteLine($"Total /b and /bank commands: {totalUsage}");
+                Console.WriteLine($"Unique players: {uniquePlayers.Count}");
+                Console.WriteLine($"Unique accounts: {uniqueAccounts.Count}");
+                Console.WriteLine($"Time range: {oneHourAgo:yyyy-MM-dd HH:mm:ss} UTC to {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
+                Console.WriteLine();
+                
+                if (bankUsageLines.Count > 0)
+                {
+                    Console.WriteLine("Recent bank command usage:");
+                    foreach (var line in bankUsageLines.TakeLast(20)) // Show last 20 entries
+                    {
+                        // Extract and format the relevant part
+                        var match = System.Text.RegularExpressions.Regex.Match(line, @"\[BANK_USAGE\] (.+)");
+                        if (match.Success)
+                        {
+                            Console.WriteLine($"  {match.Groups[1].Value}");
+                        }
+                    }
+                    
+                    if (bankUsageLines.Count > 20)
+                    {
+                        Console.WriteLine($"  ... and {bankUsageLines.Count - 20} more entries");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("No bank command usage found in the last hour.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting bank usage statistics: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            }
         }
 
 

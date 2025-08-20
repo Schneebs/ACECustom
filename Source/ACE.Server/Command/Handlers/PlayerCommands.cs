@@ -143,6 +143,14 @@ namespace ACE.Server.Command.Handlers
         [CommandHandler("b", AccessLevel.Player, CommandHandlerFlag.None, "Handles Banking Operations", "")]
         public static void HandleBankShort(Session session, params string[] parameters)
         {
+            // Log bank command usage
+            var playerName = session.Player?.Name ?? "Unknown";
+            var accountId = session.AccountId;
+            var timestamp = DateTime.UtcNow;
+            var parametersStr = string.Join(" ", parameters);
+            
+            log.Info($"[BANK_USAGE] Player: {playerName} (Account: {accountId}) used /b command at {timestamp:yyyy-MM-dd HH:mm:ss.fff} UTC with parameters: '{parametersStr}'");
+            
             if (parameters.Count() == 0)
             {
                 parameters = new string[] { "b" };
@@ -174,6 +182,17 @@ namespace ACE.Server.Command.Handlers
         {
             if (session.Player == null)
                 return;
+                
+            // Log bank command usage (only if not called from /b shortcut to avoid duplicate logging)
+            if (parameters.Length > 0 && parameters[0] != "b")
+            {
+                var playerName = session.Player?.Name ?? "Unknown";
+                var accountId = session.AccountId;
+                var timestamp = DateTime.UtcNow;
+                var parametersStr = string.Join(" ", parameters);
+                
+                log.Info($"[BANK_USAGE] Player: {playerName} (Account: {accountId}) used /bank command at {timestamp:yyyy-MM-dd HH:mm:ss.fff} UTC with parameters: '{parametersStr}'");
+            }
             if (session.Player.IsOlthoiPlayer)
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat($"Bugs ain't got banks.", ChatMessageType.Broadcast));
