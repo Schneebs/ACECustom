@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Numerics;
 
 using ACE.Common;
@@ -359,6 +360,17 @@ namespace ACE.Server.WorldObjects
             if (netsend)
                 SendUpdatePosition();
 
+            // NEW: Continuous location tracking for all monsters (not just when DebugMove is on)
+            if (this is Creature creature && !(this is Player))
+            {
+                var monsterLoc = Location.ToLOCString();
+                var targetInfo = AttackTarget != null ? $"{AttackTarget.Name} at {AttackTarget.Location.ToLOCString()}" : "No target";
+                var distanceInfo = AttackTarget != null ? $"Distance: {GetDistanceToTarget():F2}" : "No distance";
+                var velocity = PhysicsObj.CachedVelocity.Length();
+                
+                // Movement tracking disabled for production
+            }
+
             if (DebugMove)
                 //Console.WriteLine($"{Name} ({Guid}) - UpdatePosition (velocity: {PhysicsObj.CachedVelocity.Length()})");
                 Console.WriteLine($"{Name} ({Guid}) - UpdatePosition: {Location.ToLOCString()}");
@@ -366,8 +378,18 @@ namespace ACE.Server.WorldObjects
             if (MonsterState == State.Return && PhysicsObj.MovementManager.MoveToManager.PendingActions.Count == 0)
                 Sleep();
 
+            // NEW: Movement completion check - stop movement when within attack range to prevent overshooting
             if (MonsterState == State.Awake && IsMoving && PhysicsObj.MovementManager.MoveToManager.PendingActions.Count == 0)
-                IsMoving = false;
+            {
+                var distanceToTarget = GetDistanceToTarget();
+                var maxRange = GetMaxRange();
+                
+                // Stop movement when within attack range to prevent overshooting
+                if (distanceToTarget <= maxRange + 0.3f)
+                {
+                    IsMoving = false;
+                }
+            }
 
             if (stopwatch.Elapsed.TotalSeconds > 1)
             {
@@ -403,12 +425,7 @@ namespace ACE.Server.WorldObjects
                 if (prevBlock != newBlock)
                 {
                     LandblockManager.RelocateObjectForPhysics(this, true);
-                    //Console.WriteLine($"Relocating {Name} from {prevBlockCell:X8} to {newBlockCell:X8}");
-                    //Console.WriteLine("Old position: " + Location.Pos);
-                    //Console.WriteLine("New position: " + newPos.Frame.Origin);
                 }
-                //else
-                    //Console.WriteLine("Moving " + Name + " to " + Location.LandblockId.Raw.ToString("X8"));
             }
 
             // skip ObjCellID check when updating from physics
@@ -449,19 +466,40 @@ namespace ACE.Server.WorldObjects
     if (MoveSpeed > maxMoveSpeed)
         MoveSpeed = maxMoveSpeed;
 
-    // NEW: Monster speed cap - prevent monsters from being unreasonably fast
-    if (this is Creature creature && !(this is Player))
-    {
-        var maxMonsterSpeed = 15.0f; // Adjust this value as needed
-        var originalSpeed = MoveSpeed;
-        if (MoveSpeed > maxMonsterSpeed)
+            // NEW: Cap monster speed at 15f. High quickness monsters were still moving at ~37f which is Extremely fast.  For reference, tuskers are just under ~15f.
+        if (this is Creature creature && !(this is Player))
         {
-            Console.WriteLine($"[SPEED_CAP] {Name} - Speed capped: {originalSpeed:F2} → {maxMonsterSpeed:F2} (was {((originalSpeed / maxMonsterSpeed) * 100):F0}% over limit)");
-            MoveSpeed = maxMonsterSpeed;
-        }
-        else
+            var maxMonsterSpeed = 15.0f; // Adjust this value as needed. This was based on faster retail mobs.
+            
+            if (MoveSpeed > maxMonsterSpeed)
+            {
+                MoveSpeed = maxMonsterSpeed;
+            }
+        // NEW: Foolproof hard stop approach - prevent overshooting
+        if (AttackTarget != null)
         {
-            Console.WriteLine($"[SPEED_CAP] {Name} - Speed OK: {MoveSpeed:F2} (under {maxMonsterSpeed:F2} limit)");
+            var distanceToTarget = GetDistanceToTarget();
+            
+            // Hard stop when too close - cancel movement and stop. This is to reduce odds of running past a target.
+            if (distanceToTarget <= 2.0f)
+            {
+                MoveSpeed = 0.0f; // Complete stop
+                
+                // Cancel the actual movement in the physics system
+                if (PhysicsObj?.MovementManager?.MoveToManager != null)
+                {
+                    PhysicsObj.MovementManager.MoveToManager.CancelMoveTo(WeenieError.ActionCancelled);
+                }
+                
+                return; // Exit early, no more calculations needed
+            }
+            
+            // Slowdown to reduce chance of running past target - can modify the float below to see what works best.  8 seemed reasonable.
+            if (distanceToTarget <= 8.0f)
+            {
+                var slowdownFactor = Math.Max(0.05f, (distanceToTarget - 2.0f) / 6.0f);
+                MoveSpeed *= slowdownFactor;
+            }
         }
     }
         }
