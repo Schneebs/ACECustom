@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.ObjectPool;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -26,19 +27,34 @@ namespace ACE.Database
     {
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
+        // Context pooling for performance
+        private readonly ObjectPool<ShardDbContext> _contextPool;
+        private readonly ShardDbContextPooledObjectPolicy _contextPolicy;
+
+        public ShardDatabase()
+        {
+            _contextPolicy = new ShardDbContextPooledObjectPolicy();
+            _contextPool = new DefaultObjectPool<ShardDbContext>(_contextPolicy, 20);
+        }
+
         public bool Exists(bool retryUntilFound)
         {
             var config = Common.ConfigManager.Config.MySql.Shard;
 
             for (; ; )
             {
-                using (var context = new ShardDbContext())
+                var context = _contextPool.Get();
+                try
                 {
                     if (((RelationalDatabaseCreator)context.Database.GetService<IDatabaseCreator>()).Exists())
                     {
                         log.Debug($"[DATABASE] Successfully connected to {config.Database} database on {config.Host}:{config.Port}.");
                         return true;
                     }
+                }
+                finally
+                {
+                    _contextPool.Return(context);
                 }
 
                 log.Error($"[DATABASE] Attempting to reconnect to {config.Database} database on {config.Host}:{config.Port} in 5 seconds...");
@@ -126,8 +142,15 @@ namespace ACE.Database
 
         public int GetBiotaCount()
         {
-            using (var context = new ShardDbContext())
+            var context = _contextPool.Get();
+            try
+            {
                 return context.Biota.Count();
+            }
+            finally
+            {
+                _contextPool.Return(context);
+            }
         }
 
         public static int GetServerQuestCompletions(string questName)
@@ -275,15 +298,21 @@ namespace ACE.Database
 
         public virtual Biota GetBiota(uint id, bool doNotAddToCache = false)
         {
-            using (var context = new ShardDbContext())
+            var context = _contextPool.Get();
+            try
             {
                 return GetBiota(context, id, doNotAddToCache);
+            }
+            finally
+            {
+                _contextPool.Return(context);
             }
         }
 
         public List<Biota> GetBiotasByWcid(uint wcid)
         {
-            using (var context = new ShardDbContext())
+            var context = _contextPool.Get();
+            try
             {
                 context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
@@ -298,12 +327,17 @@ namespace ACE.Database
 
                 return biotas;
             }
+            finally
+            {
+                _contextPool.Return(context);
+            }
         }
 
         public List<Biota> GetBiotasByType(WeenieType type)
         {
             // warning: this query is currently unindexed!
-            using (var context = new ShardDbContext())
+            var context = _contextPool.Get();
+            try
             {
                 context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
@@ -319,6 +353,10 @@ namespace ACE.Database
                 }
 
                 return biotas;
+            }
+            finally
+            {
+                _contextPool.Return(context);
             }
         }
 
@@ -462,9 +500,20 @@ namespace ACE.Database
                 () => inventory = GetInventoryInParallel(id, true),
                 () => wieldedItems = GetWieldedItemsInParallel(id));
 
-            //var inventory = GetInventoryInParallel(id, true);
+            // Log any null biotas found for debugging
+            if (inventory != null)
+            {
+                var nullCount = inventory.Count(x => x == null);
+                if (nullCount > 0)
+                    log.Warn($"GetPossessedBiotasInParallel: Found {nullCount} null biotas in inventory for character 0x{id:X8}");
+            }
 
-            //var wieldedItems = GetWieldedItemsInParallel(id);
+            if (wieldedItems != null)
+            {
+                var nullCount = wieldedItems.Count(x => x == null);
+                if (nullCount > 0)
+                    log.Warn($"GetPossessedBiotasInParallel: Found {nullCount} null biotas in wielded items for character 0x{id:X8}");
+            }
 
             return new PossessedBiotas(inventory, wieldedItems);
         }
@@ -480,7 +529,7 @@ namespace ACE.Database
                     .Select(r => r.ObjectId)
                     .ToList();
 
-                var inventory = new List<Biota>();
+                var inventory = new ConcurrentBag<Biota>();
 
                 Parallel.ForEach(results, ConfigManager.Config.Server.Threading.DatabaseParallelOptions, result =>
                 {
@@ -493,12 +542,19 @@ namespace ACE.Database
                         if (includedNestedItems && biota.WeenieType == (int)WeenieType.Container)
                         {
                             var subItems = GetInventoryInParallel(biota.Id, false);
-                            inventory.AddRange(subItems);
+                            if (subItems != null && subItems.Count > 0)
+                            {
+                                foreach (var subItem in subItems)
+                                {
+                                    if (subItem != null)
+                                        inventory.Add(subItem);
+                                }
+                            }
                         }
                     }
                 });
 
-                return inventory;
+                return inventory.ToList();
             }
         }
 
@@ -911,6 +967,32 @@ namespace ACE.Database
             finally
             {
                 rwLock.ExitReadLock();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Object pool policy for ShardDbContext to improve performance
+    /// </summary>
+    public class ShardDbContextPooledObjectPolicy : IPooledObjectPolicy<ShardDbContext>
+    {
+        public ShardDbContext Create()
+        {
+            return new ShardDbContext();
+        }
+
+        public bool Return(ShardDbContext obj)
+        {
+            try
+            {
+                // Reset the context state for reuse
+                obj.ChangeTracker.Clear();
+                return true;
+            }
+            catch
+            {
+                // If we can't reset the context, don't return it to the pool
+                return false;
             }
         }
     }

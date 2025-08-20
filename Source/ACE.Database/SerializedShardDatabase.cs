@@ -31,6 +31,12 @@ namespace ACE.Database
         private Thread _workerThread;
         private Thread _workerThreadReadOnly;
 
+        // Performance monitoring
+        private long _totalOperations = 0;
+        private long _totalOperationTimeMs = 0;
+        private readonly object _performanceLock = new object();
+        private DateTime _lastPerformanceReport = DateTime.UtcNow;
+
         internal SerializedShardDatabase(ShardDatabase shardDatabase)
         {
             BaseDatabase = shardDatabase;
@@ -49,6 +55,48 @@ namespace ACE.Database
             _workerThread.Start();
             _workerThreadReadOnly.Start();
             stopwatch.Start();
+            
+            // Start performance monitoring
+            StartPerformanceMonitoring();
+        }
+
+        private void StartPerformanceMonitoring()
+        {
+            var monitorThread = new Thread(() =>
+            {
+                while (!_queue.IsAddingCompleted)
+                {
+                    Thread.Sleep(30000); // Report every 30 seconds
+                    ReportPerformance();
+                }
+            })
+            {
+                Name = "Performance Monitor",
+                IsBackground = true
+            };
+            monitorThread.Start();
+        }
+
+        private void ReportPerformance()
+        {
+            lock (_performanceLock)
+            {
+                if (_totalOperations > 0)
+                {
+                    var avgTime = _totalOperationTimeMs / _totalOperations;
+                    var opsPerSecond = _totalOperations / 30.0; // 30 second interval
+                    
+                    log.Info($"[PERFORMANCE] Database Operations: {_totalOperations:N0} total, " +
+                           $"Avg: {avgTime}ms, " +
+                           $"Rate: {opsPerSecond:F1} ops/sec, " +
+                           $"Queue: {_queue.Count}, " +
+                           $"ReadOnly Queue: {_readOnlyQueue.Count}");
+                    
+                    // Reset counters
+                    _totalOperations = 0;
+                    _totalOperationTimeMs = 0;
+                }
+            }
         }
 
         public void Stop()
@@ -57,6 +105,9 @@ namespace ACE.Database
             _readOnlyQueue.CompleteAdding();
             _workerThread.Join();
             _workerThreadReadOnly.Join();
+            
+            // Final performance report
+            ReportPerformance();
         }
 
         public List<string> QueueReport()
@@ -85,7 +136,18 @@ namespace ACE.Database
                             // no task to process, continue
                             continue;
                         }   
+                        
+                        var startTime = DateTime.UtcNow;
                         t.Start();
+                        t.Wait(); // Wait for completion to measure time
+                        var operationTime = (DateTime.UtcNow - startTime).TotalMilliseconds;
+                        
+                        // Track performance
+                        lock (_performanceLock)
+                        {
+                            _totalOperations++;
+                            _totalOperationTimeMs += (long)operationTime;
+                        }
                     }
                     catch (Exception e)
                     {
@@ -138,11 +200,19 @@ namespace ACE.Database
                         {
                             t.Wait();
                         }
+                        
+                        // Track performance
+                        var operationTime = stopwatch.ElapsedMilliseconds;
+                        lock (_performanceLock)
+                        {
+                            _totalOperations++;
+                            _totalOperationTimeMs += operationTime;
+                        }
                             
-                        if (stopwatch.Elapsed.Seconds >= 5)
+                        if (operationTime >= 5000) // 5 seconds
                         {
                             log.Error(
-                                $"Task: {t.AsyncState?.ToString()} taken {stopwatch.ElapsedMilliseconds}ms, queue: {_queue.Count}");
+                                $"Task: {t.AsyncState?.ToString()} taken {operationTime}ms, queue: {_queue.Count}");
                         }
                     }
                     catch (Exception ex)
@@ -172,6 +242,7 @@ namespace ACE.Database
 
 
         public int QueueCount => _queue.Count;
+        public int ReadOnlyQueueCount => _readOnlyQueue.Count;
 
         public void GetCurrentQueueWaitTime(Action<TimeSpan> callback)
         {
@@ -326,6 +397,12 @@ namespace ACE.Database
         public Character GetCharacterSynchronous(uint characterId)
         {
             return BaseDatabase.GetCharacter(characterId);            
+        }
+
+        // Performance testing method
+        public Biota GetBiotaForTesting(uint id)
+        {
+            return BaseDatabase.GetBiota(id);
         }
         
         public void SaveCharacter(Character character, ReaderWriterLockSlim rwLock, Action<bool> callback)

@@ -140,7 +140,21 @@ namespace ACE.Server.WorldObjects
             var worldObjects = new List<WorldObject>();
 
             foreach (var biota in biotas)
-                worldObjects.Add(WorldObjectFactory.CreateWorldObject(biota));
+            {
+                if (biota != null)
+                {
+                    try
+                    {
+                        var worldObject = WorldObjectFactory.CreateWorldObject(biota);
+                        if (worldObject != null)
+                            worldObjects.Add(worldObject);
+                    }
+                    catch (Exception ex)
+                    {
+                        log.Error($"Failed to create WorldObject from biota 0x{biota.Id:X8}: {ex.Message}");
+                    }
+                }
+            }
 
             SortWorldObjectsIntoInventory(worldObjects);
 

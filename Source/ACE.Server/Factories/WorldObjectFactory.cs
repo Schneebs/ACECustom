@@ -263,9 +263,22 @@ namespace ACE.Server.Factories
         /// </summary>
         public static WorldObject CreateWorldObject(Biota databaseBiota)
         {
-            var biota = ACE.Database.Adapter.BiotaConverter.ConvertToEntityBiota(databaseBiota);
+            if (databaseBiota == null)
+            {
+                log.Error("CreateWorldObject called with null databaseBiota");
+                return null;
+            }
 
-            return CreateWorldObject(biota);
+            try
+            {
+                var biota = ACE.Database.Adapter.BiotaConverter.ConvertToEntityBiota(databaseBiota);
+                return CreateWorldObject(biota);
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Failed to create WorldObject from databaseBiota 0x{databaseBiota.Id:X8}: {ex.Message}");
+                return null;
+            }
         }
 
         /// <summary>
