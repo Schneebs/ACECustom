@@ -2584,15 +2584,15 @@ namespace ACE.Server.Command.Handlers
             if (weenie == null)
                 return;
 
-            ushort stackSize = 0;
+            ushort quantity = 1;
             int? palette = null;
             float? shade = null;
 
             if (parameters.Length > 1)
             {
-                if (!ushort.TryParse(parameters[1], out stackSize) || stackSize == 0)
+                if (!ushort.TryParse(parameters[1], out quantity) || quantity == 0)
                 {
-                    session.Network.EnqueueSend(new GameMessageSystemChat($"stacksize must be number between 1 - {ushort.MaxValue}", ChatMessageType.Broadcast));
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"quantity must be number between 1 - {ushort.MaxValue}", ChatMessageType.Broadcast));
                     return;
                 }
             }
@@ -2619,30 +2619,100 @@ namespace ACE.Server.Command.Handlers
                     shade = _shade;
             }
 
-            var obj = CreateObjectForCommand(session, weenie);
-
-            if (obj == null)
+            if (quantity == 1)
             {
-                // already sent an error message
-                return;
-            }
+                // For single items, just create one
+                var obj = CreateObjectForCommand(session, weenie);
 
-            if (stackSize != 0 && obj.MaxStackSize != null)
+                if (obj == null)
+                {
+                    // already sent an error message
+                    return;
+                }
+
+                if (palette != null)
+                    obj.PaletteTemplate = palette;
+
+                if (shade != null)
+                    obj.Shade = shade;
+
+                session.Player.TryCreateInInventoryWithNetworking(obj);
+
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} has created {obj.Name} (0x{obj.Guid:X8}) in their inventory.");
+            }
+            else
             {
-                stackSize = Math.Min(stackSize, (ushort)obj.MaxStackSize);
+                // For multiple items, check if they're stackable after creating the first one
+                var firstObj = CreateObjectForCommand(session, weenie);
 
-                obj.SetStackSize(stackSize);
+                if (firstObj == null)
+                {
+                    // already sent an error message
+                    return;
+                }
+
+                // Check if the item is stackable
+                bool isStackable = firstObj.MaxStackSize > 1;
+                
+                if (isStackable)
+                {
+                    // For stackable items, create one item with the specified quantity
+                    if (palette != null)
+                        firstObj.PaletteTemplate = palette;
+
+                    if (shade != null)
+                        firstObj.Shade = shade;
+
+                    // Set the stack size (limited by max stack size)
+                    if (firstObj.MaxStackSize != null)
+                    {
+                        quantity = Math.Min(quantity, (ushort)firstObj.MaxStackSize);
+                    }
+                    firstObj.SetStackSize(quantity);
+
+                    session.Player.TryCreateInInventoryWithNetworking(firstObj);
+
+                    PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} has created {firstObj.Name} (0x{firstObj.Guid:X8}) x{firstObj.StackSize} in their inventory.");
+                }
+                else
+                {
+                    // For non-stackable items, create multiple separate items
+                    var createdObjects = new List<WorldObject>();
+
+                    // Add the first object
+                    if (palette != null)
+                        firstObj.PaletteTemplate = palette;
+
+                    if (shade != null)
+                        firstObj.Shade = shade;
+
+                    session.Player.TryCreateInInventoryWithNetworking(firstObj);
+                    createdObjects.Add(firstObj);
+
+                    // Create additional objects
+                    for (int i = 1; i < quantity; i++)
+                    {
+                        var obj = CreateObjectForCommand(session, weenie);
+
+                        if (obj == null)
+                        {
+                            // already sent an error message
+                            return;
+                        }
+
+                        if (palette != null)
+                            obj.PaletteTemplate = palette;
+
+                        if (shade != null)
+                            obj.Shade = shade;
+
+                        session.Player.TryCreateInInventoryWithNetworking(obj);
+                        createdObjects.Add(obj);
+                    }
+
+                    PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} has created {quantity}x {firstObj.Name} in their inventory.");
+                }
             }
-
-            if (palette != null)
-                obj.PaletteTemplate = palette;
-
-            if (shade != null)
-                obj.Shade = shade;
-
-            session.Player.TryCreateInInventoryWithNetworking(obj);
-
-            PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} has created {obj.Name} (0x{obj.Guid:X8}) x{obj.StackSize} in their inventory.");
         }
 
         [CommandHandler("crack", AccessLevel.Envoy, CommandHandlerFlag.RequiresWorld, 0, "Cracks the most recently appraised locked target.", "[. open it too]")]

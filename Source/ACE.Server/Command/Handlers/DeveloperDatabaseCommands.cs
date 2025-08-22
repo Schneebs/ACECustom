@@ -42,6 +42,145 @@ namespace ACE.Server.Command.Handlers
             processor.RunAsync(session, biotasPerTest);
         }
 
+        [CommandHandler("databasetest-singlethread", AccessLevel.Developer, CommandHandlerFlag.None, 0, "Test single-threaded vs multi-threaded database performance.", "testCount\n" + "optional parameter testCount if omitted 100")]
+        public static void HandleDatabaseTestSingleThread(Session session, params string[] parameters)
+        {
+            int testCount = 100;
+
+            if (parameters?.Length > 0)
+                int.TryParse(parameters[0], out testCount);
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"Starting single-threaded performance test with {testCount} operations...");
+            
+            // Run the test in a background thread to avoid blocking
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    var serializedDb = DatabaseManager.Shard as SerializedShardDatabase;
+                    if (serializedDb != null)
+                    {
+                        serializedDb.TestSingleThreadedPerformance(testCount);
+                        CommandHandlerHelper.WriteOutputInfo(session, "Single-threaded performance test completed. Check console for detailed results.");
+                    }
+                    else
+                    {
+                        CommandHandlerHelper.WriteOutputInfo(session, "Error: SerializedShardDatabase not available for testing.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Error during performance test: {ex.Message}");
+                }
+            });
+        }
+
+        [CommandHandler("databasequeue-analysis", AccessLevel.Developer, CommandHandlerFlag.None, 0, "Get detailed database queue analysis to identify bottlenecks.")]
+        public static void HandleDatabaseQueueAnalysis(Session session, params string[] parameters)
+        {
+            var serializedDb = DatabaseManager.Shard as SerializedShardDatabase;
+            if (serializedDb != null)
+            {
+                var analysis = serializedDb.GetDetailedQueueAnalysis();
+                CommandHandlerHelper.WriteOutputInfo(session, "=== DATABASE QUEUE ANALYSIS ===");
+                
+                // Split the analysis into chunks for better readability
+                var lines = analysis.Split('\n');
+                foreach (var line in lines)
+                {
+                    if (!string.IsNullOrWhiteSpace(line))
+                    {
+                        CommandHandlerHelper.WriteOutputInfo(session, line.Trim());
+                    }
+                }
+            }
+            else
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Error: SerializedShardDatabase not available for analysis.");
+            }
+        }
+
+        [CommandHandler("databasequeue-stress", AccessLevel.Developer, CommandHandlerFlag.None, 0, "Stress test the database queue to identify bottlenecks.", "operationCount\n" + "optional parameter operationCount if omitted 1000")]
+        public static void HandleDatabaseQueueStress(Session session, params string[] parameters)
+        {
+            int operationCount = 1000;
+
+            if (parameters?.Length > 0)
+                int.TryParse(parameters[0], out operationCount);
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"Starting database queue stress test with {operationCount} operations...");
+            
+            // Run the stress test in a background thread
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    var serializedDb = DatabaseManager.Shard as SerializedShardDatabase;
+                    if (serializedDb != null)
+                    {
+                        serializedDb.StressTestQueue(operationCount);
+                        CommandHandlerHelper.WriteOutputInfo(session, "Stress test completed. Monitor console for detailed performance metrics.");
+                    }
+                    else
+                    {
+                        CommandHandlerHelper.WriteOutputInfo(session, "Error: SerializedShardDatabase not available for stress testing.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Error during stress test: {ex.Message}");
+                }
+            });
+        }
+
+        [CommandHandler("databasequeue-quickcompare", AccessLevel.Developer, CommandHandlerFlag.None, 0, "Quick performance comparison between single-threaded and multi-threaded execution.", "testCount\n" + "optional parameter testCount if omitted 50")]
+        public static void HandleDatabaseQuickCompare(Session session, params string[] parameters)
+        {
+            int testCount = 50;
+
+            if (parameters?.Length > 0)
+                int.TryParse(parameters[0], out testCount);
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"Starting quick performance comparison test with {testCount} operations...");
+            
+            // Run the test in a background thread to avoid blocking
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    var serializedDb = DatabaseManager.Shard as SerializedShardDatabase;
+                    if (serializedDb != null)
+                    {
+                        serializedDb.QuickPerformanceComparison(testCount);
+                        CommandHandlerHelper.WriteOutputInfo(session, "Quick performance comparison completed. Check console for results.");
+                    }
+                    else
+                    {
+                        CommandHandlerHelper.WriteOutputInfo(session, "Error: SerializedShardDatabase not available for testing.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Error during performance comparison: {ex.Message}");
+                }
+            });
+        }
+
+        [CommandHandler("databasequeue-cancel", AccessLevel.Developer, CommandHandlerFlag.None, 0, "Cancel any running database performance tests.")]
+        public static void HandleDatabaseCancelTests(Session session, params string[] parameters)
+        {
+            var serializedDb = DatabaseManager.Shard as SerializedShardDatabase;
+            if (serializedDb != null)
+            {
+                serializedDb.CancelTests();
+                CommandHandlerHelper.WriteOutputInfo(session, "Test cancellation requested. Tests will stop at next check.");
+            }
+            else
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Error: SerializedShardDatabase not available.");
+            }
+        }
+
         [CommandHandler("fix-shortcut-bars", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, "Fixes the players with duplicate items on their shortcut bars.", "<execute>")]
         public static void HandleFixShortcutBars(Session session, params string[] parameters)
         {
@@ -291,6 +430,52 @@ namespace ACE.Server.Command.Handlers
                     Console.WriteLine("dry run completed. Use fix-spell-bars execute to actually run command");
                 }
             }
+        }
+
+        [CommandHandler("databasequeue-inventoryscan", AccessLevel.Developer, CommandHandlerFlag.None, 0, "Test REAL inventory scan performance by querying multiple players' inventories in parallel.", "playerCount\n" + "optional parameter playerCount if omitted 10")]
+        public static void HandleDatabaseInventoryScanTest(Session session, params string[] parameters)
+        {
+            int playerCount = 10;
+            if (parameters?.Length > 0)
+                int.TryParse(parameters[0], out playerCount);
+
+            // Limit the test to reasonable bounds
+            if (playerCount < 1)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Player count must be at least 1. Using default of 10.");
+                playerCount = 10;
+            }
+            else if (playerCount > 100)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "Player count limited to 100 for performance reasons. Using 100.");
+                playerCount = 100;
+            }
+
+            CommandHandlerHelper.WriteOutputInfo(session, $"Starting REAL inventory scan performance test with {playerCount} players...");
+            CommandHandlerHelper.WriteOutputInfo(session, "This will perform actual database queries to simulate real inventory scans.");
+            CommandHandlerHelper.WriteOutputInfo(session, "Monitor the console for detailed progress and results.");
+            
+            // Run the test in a background thread to avoid blocking
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    var serializedDb = DatabaseManager.Shard as SerializedShardDatabase;
+                    if (serializedDb != null)
+                    {
+                        serializedDb.TestInventoryScanPerformance(playerCount);
+                        CommandHandlerHelper.WriteOutputInfo(session, "Inventory scan performance test completed. Check console for detailed results.");
+                    }
+                    else
+                    {
+                        CommandHandlerHelper.WriteOutputInfo(session, "Error: SerializedShardDatabase not available for testing.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, $"Error during inventory scan test: {ex.Message}");
+                }
+            });
         }
     }
 }
