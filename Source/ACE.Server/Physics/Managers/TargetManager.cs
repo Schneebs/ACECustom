@@ -12,6 +12,7 @@ namespace ACE.Server.Physics.Combat
         public TargetInfo TargetInfo;
         public Dictionary<uint, TargettedVoyeurInfo> VoyeurTable;
         public double LastUpdateTime;
+        private readonly object _voyeurLock = new object();
 
         public TargetManager() { }
 
@@ -72,8 +73,15 @@ namespace ACE.Server.Physics.Combat
             }
 
             if (VoyeurTable != null)
-                foreach (var voyeur in VoyeurTable.Values.ToList())
+            {
+                List<TargettedVoyeurInfo> voyeursToProcess;
+                lock (_voyeurLock)
+                {
+                    voyeursToProcess = VoyeurTable.Values.ToList();
+                }
+                foreach (var voyeur in voyeursToProcess)
                     CheckAndUpdateVoyeur(voyeur);
+            }
 
             LastUpdateTime = PhysicsTimer.CurrentTime;
         }
@@ -114,7 +122,12 @@ namespace ACE.Server.Physics.Combat
         {
             if (PhysicsObj == null || VoyeurTable == null) return;
 
-            foreach (var voyeur in VoyeurTable.Values.ToList())
+            List<TargettedVoyeurInfo> voyeursToProcess;
+            lock (_voyeurLock)
+            {
+                voyeursToProcess = VoyeurTable.Values.ToList();
+            }
+            foreach (var voyeur in voyeursToProcess)
                 SendVoyeurUpdate(voyeur, PhysicsObj.Position, status);
         }
 
@@ -137,23 +150,26 @@ namespace ACE.Server.Physics.Combat
 
         public void AddVoyeur(uint objectID, float radius, double quantum)
         {
-            if (VoyeurTable != null)
+            lock (_voyeurLock)
             {
-                VoyeurTable.TryGetValue(objectID, out var existingInfo);
-                if (existingInfo != null)
+                if (VoyeurTable != null)
                 {
-                    existingInfo.Radius = radius;
-                    existingInfo.Quantum = quantum;
-                    return;
+                    VoyeurTable.TryGetValue(objectID, out var existingInfo);
+                    if (existingInfo != null)
+                    {
+                        existingInfo.Radius = radius;
+                        existingInfo.Quantum = quantum;
+                        return;
+                    }
                 }
+                else
+                    VoyeurTable = new Dictionary<uint, TargettedVoyeurInfo>();
+
+                var info = new TargettedVoyeurInfo(objectID, radius, quantum);
+                VoyeurTable.Add(objectID, info);
+
+                SendVoyeurUpdate(info, PhysicsObj.Position, TargetStatus.OK);
             }
-            else
-                VoyeurTable = new Dictionary<uint, TargettedVoyeurInfo>();
-
-            var info = new TargettedVoyeurInfo(objectID, radius, quantum);
-            VoyeurTable.Add(objectID, info);
-
-            SendVoyeurUpdate(info, PhysicsObj.Position, TargetStatus.OK);
         }
 
         public void SendVoyeurUpdate(TargettedVoyeurInfo voyeur, Position pos, TargetStatus status)
@@ -173,9 +189,12 @@ namespace ACE.Server.Physics.Combat
 
         public bool RemoveVoyeur(uint objectID)
         {
-            if (VoyeurTable == null) return false;
+            lock (_voyeurLock)
+            {
+                if (VoyeurTable == null) return false;
 
-            return VoyeurTable.Remove(objectID);
+                return VoyeurTable.Remove(objectID);
+            }
         }
     }
 }
