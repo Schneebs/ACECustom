@@ -4975,5 +4975,56 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"You must specify a quest name.", ChatMessageType.Broadcast));
             }
         }
+
+        [CommandHandler("reportperf", AccessLevel.Advocate, CommandHandlerFlag.RequiresWorld, 0,
+            "Generate a comprehensive performance report and send to audit channel", "")]
+        public static void HandleReportPerf(Session session, params string[] parameters)
+        {
+            try
+            {
+                var sb = new System.Text.StringBuilder();
+                
+                // Get server performance data
+                var perfReport = ServerPerformanceMonitor.ToString();
+                var lines = perfReport.Split('\n');
+                
+                // Send first part to audit channel (Discord)
+                sb.AppendLine("=== SERVER PERFORMANCE REPORT ===");
+                sb.AppendLine($"Generated: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
+                sb.AppendLine($"Online Players: {PlayerManager.GetOnlineCount()}");
+                sb.AppendLine($"Loaded Landblocks: {LandblockManager.GetLoadedLandblocks().Count}");
+                sb.AppendLine($"Database Queue: {DatabaseManager.Shard.QueueCount}");
+                sb.AppendLine($"Memory Usage: {GC.GetTotalMemory(false) / 1024 / 1024:F0} MB");
+                sb.AppendLine();
+                
+                // Add top performance metrics (first 15 lines of detailed data)
+                var detailLines = lines.Skip(2).Take(15); // Skip header lines
+                foreach (var line in detailLines)
+                {
+                    if (!string.IsNullOrWhiteSpace(line))
+                        sb.AppendLine(line);
+                }
+                
+                // Add system performance status
+                sb.AppendLine();
+                sb.AppendLine("=== SYSTEM PERFORMANCE STATUS ===");
+                var systemMetrics = ACE.Server.Performance.SystemPerformanceMonitor.GetAllMetrics();
+                foreach (var metric in systemMetrics.Values.Take(5))
+                {
+                    sb.AppendLine(metric.GetStatusSummary());
+                }
+                
+                // Send to audit channel (Discord)
+                PlayerManager.BroadcastToAuditChannel(session.Player, sb.ToString());
+                
+                // Also send to player for immediate feedback
+                session.Network.EnqueueSend(new GameMessageSystemChat("Performance report sent to audit channel.", ChatMessageType.Broadcast));
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error generating performance report: {ex}");
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error generating report: {ex.Message}", ChatMessageType.Broadcast));
+            }
+        }
     }
 }

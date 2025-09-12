@@ -122,7 +122,11 @@ namespace ACE.Server.Managers
             }
             else
             {
-                log.Debug("[PLAYERMANAGER] No offline players with changes to save");
+                // Only log this message occasionally to avoid log spam
+                if (DateTime.UtcNow.Second % 30 == 0) // Log every 30 seconds
+                {
+                    log.Debug("[PLAYERMANAGER] No offline players with changes to save");
+                }
             }
         }
 
@@ -182,7 +186,11 @@ namespace ACE.Server.Managers
             }
             else
             {
-                log.Debug("[PLAYERMANAGER] No offline players with changes to save");
+                // Only log this message occasionally to avoid log spam
+                if (DateTime.UtcNow.Second % 30 == 0) // Log every 30 seconds
+                {
+                    log.Debug("[PLAYERMANAGER] No offline players with changes to save");
+                }
             }
         }
         

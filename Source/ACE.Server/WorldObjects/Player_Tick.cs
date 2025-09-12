@@ -131,7 +131,21 @@ namespace ACE.Server.WorldObjects
             if (LastRequestedDatabaseSave == DateTime.MinValue)
                 LastRequestedDatabaseSave = DateTime.UtcNow;
 
-            if (LastRequestedDatabaseSave.AddSeconds(PlayerSaveIntervalSecs + ThreadSafeRandom.Next(15, 120)) <= DateTime.UtcNow) //vary the save duration to prevent DB slamming
+            var timeSinceLastSave = DateTime.UtcNow - LastRequestedDatabaseSave;
+            var saveInterval = PlayerSaveIntervalSecs + ThreadSafeRandom.Next(15, 120);
+            var shouldSave = LastRequestedDatabaseSave.AddSeconds(saveInterval) <= DateTime.UtcNow;
+            
+            // DEBUG: Log save condition check
+            if (shouldSave)
+            {
+                log.Info($"SAVE CHECK: {Name} - Save condition TRUE: {timeSinceLastSave.TotalSeconds:F1}s since last save, interval: {saveInterval}s");
+            }
+            else if (timeSinceLastSave.TotalSeconds > 60) // Only log every minute to avoid spam
+            {
+                log.Info($"SAVE CHECK: {Name} - Save condition FALSE: {timeSinceLastSave.TotalSeconds:F1}s since last save, interval: {saveInterval}s");
+            }
+
+            if (shouldSave)
                 SavePlayerToDatabase();
 
             if (Teleporting && DateTime.UtcNow > Time.GetDateTimeFromTimestamp(LastTeleportStartTimestamp ?? 0).Add(MaximumTeleportTime))

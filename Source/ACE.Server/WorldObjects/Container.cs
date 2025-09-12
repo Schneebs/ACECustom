@@ -140,7 +140,12 @@ namespace ACE.Server.WorldObjects
             var worldObjects = new List<WorldObject>();
 
             foreach (var biota in biotas)
-                worldObjects.Add(WorldObjectFactory.CreateWorldObject(biota));
+            {
+                if (biota != null)
+                    worldObjects.Add(WorldObjectFactory.CreateWorldObject(biota));
+                else
+                    log.Warn($"Null biota encountered in inventory for {Name}, skipping. This may indicate database corruption or missing inventory items.");
+            }
 
             SortWorldObjectsIntoInventory(worldObjects);
 
@@ -303,6 +308,16 @@ namespace ACE.Server.WorldObjects
             foreach (var container in sideContainers)
                 items.AddRange(((Container)container).GetInventoryItemsOfTypeWeenieType(type));
 
+            // Track inventory scan for performance monitoring
+            try
+            {
+                ACE.Server.Performance.InventoryScanMonitor.TrackInventoryScan("GetInventoryItemsOfTypeWeenieType", items.Count);
+            }
+            catch
+            {
+                // Don't let performance tracking break core functionality
+            }
+
             return items;
         }
 
@@ -322,6 +337,16 @@ namespace ACE.Server.WorldObjects
             var sideContainers = Inventory.Values.Where(i => i.WeenieType == WeenieType.Container).Select(i => i as Container).OrderBy(i => i.PlacementPosition).ToList();
             foreach (var container in sideContainers)
                 items.AddRange(container.GetInventoryItemsOfWCID(weenieClassId));
+
+            // Track inventory scan for performance monitoring
+            try
+            {
+                ACE.Server.Performance.InventoryScanMonitor.TrackInventoryScan("GetInventoryItemsOfWCID", items.Count);
+            }
+            catch
+            {
+                // Don't let performance tracking break core functionality
+            }
 
             return items;
         }

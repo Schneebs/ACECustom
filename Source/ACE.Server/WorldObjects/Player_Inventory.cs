@@ -40,6 +40,19 @@ namespace ACE.Server.WorldObjects
 
             results.AddRange(EquippedObjects.Values.Distinct());
 
+            // Track inventory scan for performance monitoring
+            try
+            {
+                ACE.Server.Performance.InventoryScanMonitor.TrackInventoryScan("GetAllPossessions", results.Count);
+                
+                // DEBUG: Log every inventory scan to see when they happen
+                log.Info($"INVENTORY SCAN: {Name} - GetAllPossessions called, found {results.Count} items at {DateTime.UtcNow:HH:mm:ss.fff}");
+            }
+            catch
+            {
+                // Don't let performance tracking break core functionality
+            }
+
             return results;
         }
 

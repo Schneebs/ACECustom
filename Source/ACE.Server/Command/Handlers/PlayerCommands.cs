@@ -173,6 +173,18 @@ namespace ACE.Server.Command.Handlers
         {
             if (session.Player == null)
                 return;
+                
+            // Track bank command for performance monitoring
+            try
+            {
+                var commandType = parameters.Length > 0 ? parameters[0].ToLower() : "help";
+                ACE.Server.Performance.PlayerSaveMonitor.TrackBankCommand(session.Player.Name, session.Player.Account.AccountId, commandType);
+            }
+            catch
+            {
+                // Don't let performance tracking break core functionality
+            }
+                
             if (session.Player.IsOlthoiPlayer)
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat($"Bugs ain't got banks.", ChatMessageType.Broadcast));
@@ -690,6 +702,18 @@ namespace ACE.Server.Command.Handlers
             }
 
             session.LastClapCommandTime = currentTime;
+            
+            // Track clap command for pattern detection
+            try
+            {
+                ACE.Server.Performance.PatternDetector.TrackCommand("clap", session.Player.Name, session.Player.Account.AccountId);
+                ACE.Server.Performance.PatternDetector.RecordCommandUsage("clap", session.Player.Name, session.Player.Account.AccountId);
+            }
+            catch
+            {
+                // Don't let pattern tracking break core functionality
+            }
+            
             const long ClapCostPerUnit = 250000L;
 
 

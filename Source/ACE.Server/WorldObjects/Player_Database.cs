@@ -79,6 +79,20 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void SavePlayerToDatabase(bool duringLogout = false)
         {
+            // DEBUG: Log every save to see when they happen
+            log.Info($"PLAYER SAVE: {Name} - SavePlayerToDatabase called at {DateTime.UtcNow:HH:mm:ss.fff} (duringLogout: {duringLogout})");
+            
+            // Track player save for performance monitoring
+            try
+            {
+                var saveType = duringLogout ? "logout" : "normal";
+                ACE.Server.Performance.PlayerSaveMonitor.TrackPlayerSave(this.Name, this.Account.AccountId, saveType);
+            }
+            catch
+            {
+                // Don't let performance tracking break core functionality
+            }
+
             if (CharacterChangesDetected)
                 SaveCharacterToDatabase();
 

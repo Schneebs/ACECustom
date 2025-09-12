@@ -34,12 +34,19 @@ namespace ACE.Server.WorldObjects
         {
             foreach (var biota in wieldedItems)
             {
-                var worldObject = WorldObjectFactory.CreateWorldObject(biota);
-                EquippedObjects[worldObject.Guid] = worldObject;
+                if (biota != null)
+                {
+                    var worldObject = WorldObjectFactory.CreateWorldObject(biota);
+                    EquippedObjects[worldObject.Guid] = worldObject;
 
-                AddItemToEquippedItemsRatingCache(worldObject);
+                    AddItemToEquippedItemsRatingCache(worldObject);
 
-                EncumbranceVal += (worldObject.EncumbranceVal ?? 0);
+                    EncumbranceVal += (worldObject.EncumbranceVal ?? 0);
+                }
+                else
+                {
+                    log.Warn($"Null biota encountered in wielded items for {Name}, skipping. This may indicate database corruption or missing equipped items.");
+                }
             }
 
             EquippedObjectsLoaded = true;
