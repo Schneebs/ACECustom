@@ -328,7 +328,44 @@ namespace ACE.Server.WorldObjects.Managers
                         else if (spell.StatModKey == 64 || spell.StatModKey == 65 || spell.StatModKey == 66 //slash, pierce, bludge
                             || spell.StatModKey == 67 || spell.StatModKey == 68 || spell.StatModKey == 69 || spell.StatModKey == 70) //fire, cold, acid, electric
                         {
-                            luminanceAug -= GetLifeAugProtectRating(player.LuminanceAugmentLifeCount ?? 0);
+                            Console.WriteLine($"[LIFE AUG DEBUG] ENTERING PROTECTION CALCULATION - Player: {player.Name}, StatModKey: {spell.StatModKey}");
+                            Console.WriteLine($"[LIFE AUG DEBUG] spell.StatModVal: {spell.StatModVal:F6}");
+                            Console.WriteLine($"[LIFE AUG DEBUG] luminanceAug before: {luminanceAug:F6}");
+                            long lifeAugs = player.LuminanceAugmentLifeCount ?? 0;
+                            float lifeAugBonus = GetLifeAugProtectRating(lifeAugs);
+                            float oldLuminanceAug = luminanceAug;
+                            
+                            // Calculate what the OLD additive system would have done
+                            float additiveLuminanceAug = oldLuminanceAug - lifeAugBonus;
+                            float additiveResistance = 1.0f - additiveLuminanceAug;
+                            
+                            // NEW multiplicative system with multiplier 2.0
+                            // Apply multiplicative scaling to the base protection value (spell.StatModVal)
+                            float lifeAugMultiplier = 1.0f - (lifeAugBonus * 2.0f);
+                            float baseProtection = spell.StatModVal; // This is the base 0.32 (68% protection)
+                            float multiplicativeProtection = baseProtection * lifeAugMultiplier;
+                            luminanceAug = multiplicativeProtection - baseProtection; // Convert to additive space
+                            
+                            // DEBUG: Life Aug Protection Calculation - Before/After Comparison
+                            Console.WriteLine($"[LIFE AUG DEBUG] Player: {player.Name}");
+                            Console.WriteLine($"[LIFE AUG DEBUG] Life Augs: {lifeAugs}");
+                            Console.WriteLine($"[LIFE AUG DEBUG] Life Aug Bonus: {lifeAugBonus:F6} ({lifeAugBonus * 100:F2}%)");
+                            Console.WriteLine($"[LIFE AUG DEBUG] Base Protection: {baseProtection:F6} ({(1-baseProtection)*100:F2}% resistance)");
+                            Console.WriteLine($"[LIFE AUG DEBUG] ========================================");
+                            Console.WriteLine($"[LIFE AUG DEBUG] OLD ADDITIVE SYSTEM:");
+                            Console.WriteLine($"[LIFE AUG DEBUG]   Base Protection: {baseProtection:F6}");
+                            Console.WriteLine($"[LIFE AUG DEBUG]   Life Aug Bonus: {lifeAugBonus:F6}");
+                            Console.WriteLine($"[LIFE AUG DEBUG]   Final Protection: {baseProtection - lifeAugBonus:F6}");
+                            Console.WriteLine($"[LIFE AUG DEBUG]   Final Resistance: {additiveResistance:F6} ({additiveResistance * 100:F2}%)");
+                            Console.WriteLine($"[LIFE AUG DEBUG]   Damage Multiplier: {additiveLuminanceAug:F6}");
+                            Console.WriteLine($"[LIFE AUG DEBUG] ========================================");
+                            Console.WriteLine($"[LIFE AUG DEBUG] NEW MULTIPLICATIVE SYSTEM (2.0x):");
+                            Console.WriteLine($"[LIFE AUG DEBUG]   Life Aug Multiplier: {lifeAugMultiplier:F6}");
+                            Console.WriteLine($"[LIFE AUG DEBUG]   Base Protection: {baseProtection:F6}");
+                            Console.WriteLine($"[LIFE AUG DEBUG]   Multiplicative Protection: {multiplicativeProtection:F6}");
+                            Console.WriteLine($"[LIFE AUG DEBUG]   Final Resistance: {(1.0f - multiplicativeProtection):F6} ({(1.0f - multiplicativeProtection) * 100:F2}%)");
+                            Console.WriteLine($"[LIFE AUG DEBUG]   Damage Multiplier: {multiplicativeProtection:F6}");
+                            Console.WriteLine($"[LIFE AUG DEBUG] ========================================");
                         }
                         else
                         {
@@ -345,7 +382,19 @@ namespace ACE.Server.WorldObjects.Managers
                             || spell.StatModKey == 67 || spell.StatModKey == 68 || spell.StatModKey == 69 || spell.StatModKey == 70 //fire, cold, acid, electric
                             || spell.StatModKey == 312 || spell.StatModKey == 307 || spell.StatModKey == 318 || spell.StatModKey == 308 || spell.StatModKey == 317) //surge of regeneration
                         {
-                            luminanceAug += (player.LuminanceAugmentLifeCount ?? 0.0f) * 0.01f;
+                            long lifeAugs = player.LuminanceAugmentLifeCount ?? 0;
+                            float vulnBonus = lifeAugs * 0.01f;
+                            float oldLuminanceAug = luminanceAug;
+                            luminanceAug += vulnBonus;
+                            
+                            // DEBUG: Life Aug Vulnerability Calculation
+                            Console.WriteLine($"[LIFE AUG VULN DEBUG] Player: {player.Name}");
+                            Console.WriteLine($"[LIFE AUG VULN DEBUG] Life Augs: {lifeAugs}");
+                            Console.WriteLine($"[LIFE AUG VULN DEBUG] Vuln Bonus: {vulnBonus:F6} ({vulnBonus * 100:F2}%)");
+                            Console.WriteLine($"[LIFE AUG VULN DEBUG] Before: luminanceAug = {oldLuminanceAug:F6}");
+                            Console.WriteLine($"[LIFE AUG VULN DEBUG] After: luminanceAug = {luminanceAug:F6}");
+                            Console.WriteLine($"[LIFE AUG VULN DEBUG] Change: +{vulnBonus:F6}");
+                            Console.WriteLine($"[LIFE AUG VULN DEBUG] ========================================");
                         }
                         else
                         {
@@ -396,54 +445,89 @@ namespace ACE.Server.WorldObjects.Managers
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float GetLifeAugProtectRating(long LifeAugAmt)
         {
+            if (LifeAugAmt <= 0)
+            {
+                Console.WriteLine($"[LIFE AUG CALC DEBUG] Life Augs: {LifeAugAmt} -> Bonus: 0.000000");
+                return 0.0f;
+            }
+
             float bonus = 0;
+            int tier1 = 0, tier2 = 0, tier3 = 0, tier4 = 0, tier5 = 0, tier6 = 0, tier7 = 0, tier8 = 0, tier9 = 0, tier10 = 0, tier11 = 0;
+            
             for (int x = 0; x < LifeAugAmt; x++)
             {
                 if (x < 10)
                 {
                     bonus += 0.01f;
+                    tier1++;
                 }
                 else if (x < 30)
                 {
                     bonus += 0.005f;
+                    tier2++;
                 }
                 else if (x < 50)
                 {
                     bonus += 0.0025f;
+                    tier3++;
                 }
                 else if (x < 70)
                 {
                     bonus += 0.00125f;
+                    tier4++;
                 }
                 else if (x < 100)
                 {
                     bonus += 0.000625f;
+                    tier5++;
                 }
                 else if (x < 120)
                 {
                     bonus += 0.000312f;
+                    tier6++;
                 }
                 else if (x < 150)
                 {
                     bonus += 0.000156f;
+                    tier7++;
                 }
                 else if (x < 175)
                 {
                     bonus += 0.000078f;
+                    tier8++;
                 }
                 else if (x < 200)
                 {
                     bonus += 0.000039f;
+                    tier9++;
                 }
                 else if (x < 225)
                 {
                     bonus += 0.0000195f;
+                    tier10++;
                 }
                 else
                 {
                     bonus += 0.0000100f;
+                    tier11++;
                 }
             }
+            
+            // DEBUG: Show detailed calculation
+            Console.WriteLine($"[LIFE AUG CALC DEBUG] Life Augs: {LifeAugAmt}");
+            Console.WriteLine($"[LIFE AUG CALC DEBUG] Tier 1 (0-9): {tier1} × 0.01 = {tier1 * 0.01f:F6}");
+            Console.WriteLine($"[LIFE AUG CALC DEBUG] Tier 2 (10-29): {tier2} × 0.005 = {tier2 * 0.005f:F6}");
+            Console.WriteLine($"[LIFE AUG CALC DEBUG] Tier 3 (30-49): {tier3} × 0.0025 = {tier3 * 0.0025f:F6}");
+            Console.WriteLine($"[LIFE AUG CALC DEBUG] Tier 4 (50-69): {tier4} × 0.00125 = {tier4 * 0.00125f:F6}");
+            Console.WriteLine($"[LIFE AUG CALC DEBUG] Tier 5 (70-99): {tier5} × 0.000625 = {tier5 * 0.000625f:F6}");
+            Console.WriteLine($"[LIFE AUG CALC DEBUG] Tier 6 (100-119): {tier6} × 0.000312 = {tier6 * 0.000312f:F6}");
+            Console.WriteLine($"[LIFE AUG CALC DEBUG] Tier 7 (120-149): {tier7} × 0.000156 = {tier7 * 0.000156f:F6}");
+            Console.WriteLine($"[LIFE AUG CALC DEBUG] Tier 8 (150-174): {tier8} × 0.000078 = {tier8 * 0.000078f:F6}");
+            Console.WriteLine($"[LIFE AUG CALC DEBUG] Tier 9 (175-199): {tier9} × 0.000039 = {tier9 * 0.000039f:F6}");
+            Console.WriteLine($"[LIFE AUG CALC DEBUG] Tier 10 (200-224): {tier10} × 0.0000195 = {tier10 * 0.0000195f:F6}");
+            Console.WriteLine($"[LIFE AUG CALC DEBUG] Tier 11 (225+): {tier11} × 0.00001 = {tier11 * 0.00001f:F6}");
+            Console.WriteLine($"[LIFE AUG CALC DEBUG] TOTAL BONUS: {bonus:F6} ({bonus * 100:F2}%)");
+            
             return bonus;
         }
 

@@ -113,26 +113,60 @@ namespace ACE.Server.WorldObjects
 
             var naturalResistMod = GetNaturalResistance(damageType);
 
+            // DEBUG: Show initial values
+            if (this is Player player)
+            {
+                Console.WriteLine($"[RESISTANCE DEBUG] Player: {player.Name}");
+                Console.WriteLine($"[RESISTANCE DEBUG] Damage Type: {damageType}");
+                Console.WriteLine($"[RESISTANCE DEBUG] Initial protMod: {protMod:F6} ({(1-protMod)*100:F2}% resistance)");
+                Console.WriteLine($"[RESISTANCE DEBUG] Initial vulnMod: {vulnMod:F6} ({(vulnMod-1)*100:F2}% vulnerability)");
+                Console.WriteLine($"[RESISTANCE DEBUG] Natural Resistance: {naturalResistMod:F6} ({(1-naturalResistMod)*100:F2}% resistance)");
+                Console.WriteLine($"[RESISTANCE DEBUG] NOTE: This shows the FINAL result after life aug calculations");
+            }
+
             // protection mod becomes either life protection or natural resistance,
             // whichever is more powerful (more powerful = lower value here)
             if (protMod > naturalResistMod)
+            {
+                Console.WriteLine($"[RESISTANCE DEBUG] Using natural resistance (more powerful)");
                 protMod = naturalResistMod;
+            }
+            else
+            {
+                Console.WriteLine($"[RESISTANCE DEBUG] Using life protection (more powerful)");
+            }
 
             // does this stack with natural resistance?
-            if (this is Player player)
+            if (this is Player player2)
             {
-                var resistAug = player.GetAugmentationResistance(damageType);
+                var resistAug = player2.GetAugmentationResistance(damageType);
                 if (resistAug > 0)
                 {
                     var augFactor = Math.Min(1.0f, resistAug * 0.1f);
+                    var oldProtMod = protMod;
                     protMod *= 1.0f - augFactor;
+                    
+                    Console.WriteLine($"[RESISTANCE DEBUG] DRR: {resistAug} (Factor: {augFactor:F3})");
+                    Console.WriteLine($"[RESISTANCE DEBUG] DRR Applied: {oldProtMod:F6} × (1 - {augFactor:F3}) = {protMod:F6}");
+                    Console.WriteLine($"[RESISTANCE DEBUG] DRR Resistance: {(1-protMod)*100:F2}%");
+                }
+                else
+                {
+                    Console.WriteLine($"[RESISTANCE DEBUG] No DRR applied");
                 }
             }
 
             // vulnerability mod becomes either life vuln or weapon resistance mod,
             // whichever is more powerful
             if (vulnMod < weaponResistanceMod)
+            {
+                Console.WriteLine($"[RESISTANCE DEBUG] Using weapon resistance mod (more powerful)");
                 vulnMod = weaponResistanceMod;
+            }
+            else
+            {
+                Console.WriteLine($"[RESISTANCE DEBUG] Using life vulnerability (more powerful)");
+            }
 
             if (ignoreMagicResist)
             {
@@ -146,9 +180,25 @@ namespace ACE.Server.WorldObjects
 
                 protMod = GetNegativeRatingMod(addProt);
                 vulnMod = GetPositiveRatingMod(addVuln);
+                
+                Console.WriteLine($"[RESISTANCE DEBUG] Ignore Magic Resist applied");
             }
 
-            return protMod * vulnMod;
+            var finalMod = protMod * vulnMod;
+            
+            // DEBUG: Show final calculation
+            if (this is Player)
+            {
+                Console.WriteLine($"[RESISTANCE DEBUG] Final Calculation:");
+                Console.WriteLine($"[RESISTANCE DEBUG] protMod: {protMod:F6} ({(1-protMod)*100:F2}% resistance)");
+                Console.WriteLine($"[RESISTANCE DEBUG] vulnMod: {vulnMod:F6} ({(vulnMod-1)*100:F2}% vulnerability)");
+                Console.WriteLine($"[RESISTANCE DEBUG] Final Mod: {protMod:F6} × {vulnMod:F6} = {finalMod:F6}");
+                Console.WriteLine($"[RESISTANCE DEBUG] Final Resistance: {(1-finalMod)*100:F2}%");
+                Console.WriteLine($"[RESISTANCE DEBUG] Final Damage Multiplier: {finalMod:F6}");
+                Console.WriteLine($"[RESISTANCE DEBUG] ========================================");
+            }
+
+            return finalMod;
         }
 
         public virtual float GetNaturalResistance(DamageType damageType)
