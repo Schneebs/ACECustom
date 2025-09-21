@@ -328,44 +328,42 @@ namespace ACE.Server.WorldObjects.Managers
                         else if (spell.StatModKey == 64 || spell.StatModKey == 65 || spell.StatModKey == 66 //slash, pierce, bludge
                             || spell.StatModKey == 67 || spell.StatModKey == 68 || spell.StatModKey == 69 || spell.StatModKey == 70) //fire, cold, acid, electric
                         {
-                            Console.WriteLine($"[LIFE AUG DEBUG] ENTERING PROTECTION CALCULATION - Player: {player.Name}, StatModKey: {spell.StatModKey}");
-                            Console.WriteLine($"[LIFE AUG DEBUG] spell.StatModVal: {spell.StatModVal:F6}");
-                            Console.WriteLine($"[LIFE AUG DEBUG] luminanceAug before: {luminanceAug:F6}");
                             long lifeAugs = player.LuminanceAugmentLifeCount ?? 0;
                             float lifeAugBonus = GetLifeAugProtectRating(lifeAugs);
-                            float oldLuminanceAug = luminanceAug;
                             
-                            // Calculate what the OLD additive system would have done
-                            float additiveLuminanceAug = oldLuminanceAug - lifeAugBonus;
-                            float additiveResistance = 1.0f - additiveLuminanceAug;
+                            // Check if this creature uses multiplicative calculation
+                            bool useMultiplicative = player.GetProperty(PropertyBool.UseMultiplicativeLifeAugCalc) ?? false;
+                            float multiplier = (float)(player.GetProperty(PropertyFloat.LifeAugMultiplier) ?? 2.0); // Default to 2.0x multiplier
                             
-                            // NEW multiplicative system with multiplier 2.0
-                            // Apply multiplicative scaling to the base protection value (spell.StatModVal)
-                            float lifeAugMultiplier = 1.0f - (lifeAugBonus * 2.0f);
-                            float baseProtection = spell.StatModVal; // This is the base 0.32 (68% protection)
-                            float multiplicativeProtection = baseProtection * lifeAugMultiplier;
-                            luminanceAug = multiplicativeProtection - baseProtection; // Convert to additive space
-                            
-                            // DEBUG: Life Aug Protection Calculation - Before/After Comparison
-                            Console.WriteLine($"[LIFE AUG DEBUG] Player: {player.Name}");
-                            Console.WriteLine($"[LIFE AUG DEBUG] Life Augs: {lifeAugs}");
-                            Console.WriteLine($"[LIFE AUG DEBUG] Life Aug Bonus: {lifeAugBonus:F6} ({lifeAugBonus * 100:F2}%)");
-                            Console.WriteLine($"[LIFE AUG DEBUG] Base Protection: {baseProtection:F6} ({(1-baseProtection)*100:F2}% resistance)");
-                            Console.WriteLine($"[LIFE AUG DEBUG] ========================================");
-                            Console.WriteLine($"[LIFE AUG DEBUG] OLD ADDITIVE SYSTEM:");
-                            Console.WriteLine($"[LIFE AUG DEBUG]   Base Protection: {baseProtection:F6}");
-                            Console.WriteLine($"[LIFE AUG DEBUG]   Life Aug Bonus: {lifeAugBonus:F6}");
-                            Console.WriteLine($"[LIFE AUG DEBUG]   Final Protection: {baseProtection - lifeAugBonus:F6}");
-                            Console.WriteLine($"[LIFE AUG DEBUG]   Final Resistance: {additiveResistance:F6} ({additiveResistance * 100:F2}%)");
-                            Console.WriteLine($"[LIFE AUG DEBUG]   Damage Multiplier: {additiveLuminanceAug:F6}");
-                            Console.WriteLine($"[LIFE AUG DEBUG] ========================================");
-                            Console.WriteLine($"[LIFE AUG DEBUG] NEW MULTIPLICATIVE SYSTEM (2.0x):");
-                            Console.WriteLine($"[LIFE AUG DEBUG]   Life Aug Multiplier: {lifeAugMultiplier:F6}");
-                            Console.WriteLine($"[LIFE AUG DEBUG]   Base Protection: {baseProtection:F6}");
-                            Console.WriteLine($"[LIFE AUG DEBUG]   Multiplicative Protection: {multiplicativeProtection:F6}");
-                            Console.WriteLine($"[LIFE AUG DEBUG]   Final Resistance: {(1.0f - multiplicativeProtection):F6} ({(1.0f - multiplicativeProtection) * 100:F2}%)");
-                            Console.WriteLine($"[LIFE AUG DEBUG]   Damage Multiplier: {multiplicativeProtection:F6}");
-                            Console.WriteLine($"[LIFE AUG DEBUG] ========================================");
+                            if (useMultiplicative)
+                            {
+                                // NEW multiplicative system with configurable multiplier
+                                float lifeAugMultiplier = 1.0f - (lifeAugBonus * multiplier);
+                                float baseProtection = spell.StatModVal; // This is the base protection value
+                                float multiplicativeProtection = baseProtection * lifeAugMultiplier;
+                                luminanceAug = multiplicativeProtection - baseProtection; // Convert to additive space
+                                
+                                Console.WriteLine($"[LIFE AUG DEBUG] MULTIPLICATIVE SYSTEM - Player: {player.Name}");
+                                Console.WriteLine($"[LIFE AUG DEBUG] Life Augs: {lifeAugs}, Multiplier: {multiplier:F2}x");
+                                Console.WriteLine($"[LIFE AUG DEBUG] Life Aug Bonus: {lifeAugBonus:F6} ({lifeAugBonus * 100:F2}%)");
+                                Console.WriteLine($"[LIFE AUG DEBUG] Base Protection: {baseProtection:F6} ({(1-baseProtection)*100:F2}% resistance)");
+                                Console.WriteLine($"[LIFE AUG DEBUG] Life Aug Multiplier: {lifeAugMultiplier:F6}");
+                                Console.WriteLine($"[LIFE AUG DEBUG] Final Protection: {multiplicativeProtection:F6}");
+                                Console.WriteLine($"[LIFE AUG DEBUG] Final Resistance: {(1.0f - multiplicativeProtection):F6} ({(1.0f - multiplicativeProtection) * 100:F2}%)");
+                                Console.WriteLine($"[LIFE AUG DEBUG] Damage Multiplier: {multiplicativeProtection:F6}");
+                            }
+                            else
+                            {
+                                // OLD additive system (default for existing creatures)
+                                luminanceAug -= lifeAugBonus;
+                                
+                                Console.WriteLine($"[LIFE AUG DEBUG] ADDITIVE SYSTEM - Player: {player.Name}");
+                                Console.WriteLine($"[LIFE AUG DEBUG] Life Augs: {lifeAugs}");
+                                Console.WriteLine($"[LIFE AUG DEBUG] Life Aug Bonus: {lifeAugBonus:F6} ({lifeAugBonus * 100:F2}%)");
+                                Console.WriteLine($"[LIFE AUG DEBUG] Final Protection: {luminanceAug:F6}");
+                                Console.WriteLine($"[LIFE AUG DEBUG] Final Resistance: {(1.0f - luminanceAug):F6} ({(1.0f - luminanceAug) * 100:F2}%)");
+                                Console.WriteLine($"[LIFE AUG DEBUG] Damage Multiplier: {luminanceAug:F6}");
+                            }
                         }
                         else
                         {
