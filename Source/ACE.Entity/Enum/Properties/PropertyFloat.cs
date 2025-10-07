@@ -238,5 +238,9 @@ namespace ACE.Entity.Enum.Properties
         EnrageDamageReduction          = 9012,
         EnrageThreshold                = 9013,
         LifeAugMultiplier              = 9014,
+        [AssessmentProperty]
+        SplitArrowRange                 = 9032,
+        [AssessmentProperty]
+        SplitArrowDamageMultiplier     = 9033,
     }
 }
