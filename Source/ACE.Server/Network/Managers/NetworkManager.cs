@@ -259,6 +259,36 @@ namespace ACE.Server.Network.Managers
             }
         }
 
+        /// <summary>
+        /// Gets the count of sessions from an IP address that would count against the limit,
+        /// considering a specific landblock that's being checked for login
+        /// </summary>
+        public static int GetSessionEndpointTotalByAddressCountWithLandblock(IPAddress address, ushort? checkLandblock, ACE.Entity.Enum.AccessLevel accessLevel)
+        {
+            sessionLock.EnterReadLock();
+            try
+            {
+                int result = 0;
+
+                // Count existing sessions that aren't in exempt landblocks
+                foreach (var s in sessionMap)
+                {
+                    if (s != null && s.EndPoint.Address.Equals(address) && !s.inExemptLandblock() && (s.AccessLevel != ACE.Entity.Enum.AccessLevel.Admin && s.AccessLevel != ACE.Entity.Enum.AccessLevel.Developer))
+                        result++;
+                }
+
+                // Add 1 for the character trying to log in, IF they're not in an exempt landblock
+                if (checkLandblock.HasValue && !ACE.Server.Entity.Landblock.connectionExemptLandblocks.Contains(checkLandblock.Value) && (accessLevel != ACE.Entity.Enum.AccessLevel.Admin && accessLevel != ACE.Entity.Enum.AccessLevel.Developer))
+                    result++;
+
+                return result;
+            }
+            finally
+            {
+                sessionLock.ExitReadLock();
+            }
+        }
+
         public static Session FindOrCreateSession(ConnectionListener connectionListener, IPEndPoint endPoint)
         {
             Session session;

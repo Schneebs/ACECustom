@@ -257,6 +257,27 @@ namespace ACE.Server.Network.Handlers
                 return;
             }
 
+            // Check IP limit with character's saved landblock BEFORE loading character data
+            var ipAllowsUnlimited = ConfigManager.Config.Server.Network.AllowUnlimitedSessionsFromIPAddresses.Contains(session.EndPoint.Address.ToString());
+            
+            if (!ipAllowsUnlimited && ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress != -1)
+            {
+                // Get the character's saved landblock from the offline player biota
+                var savedPosition = offlinePlayer.Location;
+                ushort? savedLandblock = savedPosition?.LandblockId.Landblock;
+
+                var sessionCount = Managers.NetworkManager.GetSessionEndpointTotalByAddressCountWithLandblock(
+                    session.EndPoint.Address, 
+                    savedLandblock,
+                    session.AccessLevel);
+
+                if (sessionCount > ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress)
+                {
+                    session.SendCharacterError(CharacterError.LogonServerFull);
+                    return;
+                }
+            }
+
             session.InitSessionForWorldLogin();
 
             session.State = SessionState.WorldConnected;

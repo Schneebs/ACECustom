@@ -791,6 +791,7 @@ namespace ACE.Server.WorldObjects
 
                     if (++nonexemptCount > ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress)
                     {
+                        log.Warn($"Player {p.Name} (0x{p.Guid}) exceeded IP limit after teleport - this shouldn't happen with pre-login check. IP: {endpoint.Address}");
                         p.SendMessage($"Booting due to exceeding {ConfigManager.Config.Server.Network.MaximumAllowedSessionsPerIPAddress} allowed outside of exempt areas.");
                         p.Session.LogOffPlayer();
                     }
