@@ -118,10 +118,22 @@ namespace ACE.Server.WorldObjects
             {
                 Console.WriteLine($"[RESISTANCE DEBUG] Player: {player.Name}");
                 Console.WriteLine($"[RESISTANCE DEBUG] Damage Type: {damageType}");
+                Console.WriteLine($"[RESISTANCE DEBUG] Attacker: {attacker?.Name ?? "None"}");
                 Console.WriteLine($"[RESISTANCE DEBUG] Initial protMod: {protMod:F6} ({(1-protMod)*100:F2}% resistance)");
                 Console.WriteLine($"[RESISTANCE DEBUG] Initial vulnMod: {vulnMod:F6} ({(vulnMod-1)*100:F2}% vulnerability)");
                 Console.WriteLine($"[RESISTANCE DEBUG] Natural Resistance: {naturalResistMod:F6} ({(1-naturalResistMod)*100:F2}% resistance)");
-                Console.WriteLine($"[RESISTANCE DEBUG] NOTE: This shows the FINAL result after life aug calculations");
+            }
+
+            // Apply life aug calculation dynamically based on attacker's property
+            // This allows per-monster control of life aug effectiveness
+            if (this is Player targetPlayer && attacker != null)
+            {
+                var lifeAugCount = targetPlayer.LuminanceAugmentLifeCount ?? 0;
+                if (lifeAugCount > 0)
+                {
+                    // Apply life aug bonus to protection mod based on attacker property
+                    protMod = Managers.EnchantmentManager.GetProtectionWithLifeAug(protMod, lifeAugCount, attacker);
+                }
             }
 
             // protection mod becomes either life protection or natural resistance,
