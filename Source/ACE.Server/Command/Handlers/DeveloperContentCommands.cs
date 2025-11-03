@@ -2173,7 +2173,23 @@ namespace ACE.Server.Command.Handlers.Processors
                 }
 
                 using (var ctx = new WorldDbContext())
+                {
+                    // If identifier is a numeric weenie ID, delete existing weenie first to avoid duplicate key errors
+                    if (uint.TryParse(identifier, out var wcid))
+                    {
+                        try
+                        {
+                            ctx.Database.ExecuteSqlRaw($"DELETE FROM `weenie` WHERE `class_Id` = {wcid};");
+                            CommandHandlerHelper.WriteOutputInfo(session, $"Deleted existing weenie {wcid} (if it existed)");
+                        }
+                        catch (Exception deleteEx)
+                        {
+                            CommandHandlerHelper.WriteOutputInfo(session, $"Warning: Error deleting existing weenie: {deleteEx.Message}");
+                        }
+                    }
+                    
                     ctx.Database.ExecuteSqlRaw(sql);
+                }
 
                 CommandHandlerHelper.WriteOutputInfo(session, $"Imported {identifier} from discord.");
             }

@@ -1889,19 +1889,23 @@ namespace ACE.Server.WorldObjects
 
             if (weenie == null)
             {
-                log.Error($"{Name} ({Guid}).GetSetupRadius({spell.Id} - {spell.Name}): couldn't find weenie {projectileWcid}");
+                var errorMsg = $"{Name} ({Guid}).GetSetupRadius({spell.Id} - {spell.Name}): couldn't find weenie {projectileWcid}";
+                log.Error(errorMsg);
+                SendAdminNotification($"[SPELL ERROR] {errorMsg}");
                 return 0.0f;
             }
 
-            if (!weenie.PropertiesDID.TryGetValue(PropertyDataId.Setup, out var setupId))
+            if (weenie.PropertiesDID == null || !weenie.PropertiesDID.TryGetValue(PropertyDataId.Setup, out var setupId))
             {
-                log.Error($"{Name} ({Guid}).GetSetupRadius({spell.Id} - {spell.Name}): couldn't find setup ID for {weenie.WeenieClassId} - {weenie.ClassName}");
+                var errorMsg = $"{Name} ({Guid}).GetSetupRadius({spell.Id} - {spell.Name}): couldn't find setup ID for {weenie.WeenieClassId} - {weenie.ClassName}";
+                log.Error(errorMsg);
+                SendAdminNotification($"[SPELL ERROR] {errorMsg}");
                 return 0.0f;
             }
 
             var setup = DatManager.PortalDat.ReadFromDat<SetupModel>(setupId);
 
-            if (!weenie.PropertiesFloat.TryGetValue(PropertyFloat.DefaultScale, out var scale))
+            if (weenie.PropertiesFloat == null || !weenie.PropertiesFloat.TryGetValue(PropertyFloat.DefaultScale, out var scale))
                 scale = 1.0f;
 
             var result = (float)(setup.Spheres[0].Radius * scale);
@@ -1909,6 +1913,30 @@ namespace ACE.Server.WorldObjects
             ProjectileRadiusCache.TryAdd(projectileWcid, result);
 
             return result;
+        }
+
+        /// <summary>
+        /// Sends a notification message to all online admins
+        /// </summary>
+        private static void SendAdminNotification(string message)
+        {
+            try
+            {
+                var adminPlayers = PlayerManager.GetAllOnline()
+                    .Where(p => p.Account != null && (uint)p.Account.AccessLevel >= (uint)AccessLevel.Advocate);
+
+                foreach (var admin in adminPlayers)
+                {
+                    if (admin.Session?.Network == null)
+                        continue;
+
+                    admin.Session.Network.EnqueueSend(new GameMessageSystemChat(message, ChatMessageType.System));
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Error sending admin notification: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -1931,13 +1959,17 @@ namespace ACE.Server.WorldObjects
 
                 if (weenie == null)
                 {
-                    log.Error($"{Name} ({Guid}).GetSpellProjectileSpeed({spell.Id} - {spell.Name}, {distance}): couldn't find weenie {projectileWcid}");
+                    var errorMsg = $"{Name} ({Guid}).GetSpellProjectileSpeed({spell.Id} - {spell.Name}, {distance}): couldn't find weenie {projectileWcid}";
+                    log.Error(errorMsg);
+                    SendAdminNotification($"[SPELL ERROR] {errorMsg}");
                     return 0.0f;
                 }
 
-                if (!weenie.PropertiesFloat.TryGetValue(PropertyFloat.MaximumVelocity, out var maxVelocity))
+                if (weenie.PropertiesFloat == null || !weenie.PropertiesFloat.TryGetValue(PropertyFloat.MaximumVelocity, out var maxVelocity))
                 {
-                    log.Error($"{Name} ({Guid}).GetSpellProjectileSpeed({spell.Id} - {spell.Name}, {distance}): couldn't find MaxVelocity for {weenie.WeenieClassId} - {weenie.ClassName}");
+                    var errorMsg = $"{Name} ({Guid}).GetSpellProjectileSpeed({spell.Id} - {spell.Name}, {distance}): couldn't find MaxVelocity for {weenie.WeenieClassId} - {weenie.ClassName}";
+                    log.Error(errorMsg);
+                    SendAdminNotification($"[SPELL ERROR] {errorMsg}");
                     return 0.0f;
                 }
 
