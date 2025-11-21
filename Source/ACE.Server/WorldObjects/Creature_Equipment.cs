@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using ACE.Common;
+using ACE.Common.Extensions;
 using ACE.Database;
 using ACE.Database.Models.World;
 using ACE.Entity;
@@ -32,17 +33,157 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         protected void AddBiotasToEquippedObjects(IEnumerable<ACE.Database.Models.Shard.Biota> wieldedItems)
         {
+            var itemsBySlot = new Dictionary<EquipMask, List<WorldObject>>();
+            var itemsToUnequip = new List<WorldObject>();
+
+            // First pass: Create world objects and group by equipment slot
             foreach (var biota in wieldedItems)
             {
-                var worldObject = WorldObjectFactory.CreateWorldObject(biota);
-                EquippedObjects[worldObject.Guid] = worldObject;
+                try
+                {
+                    var worldObject = WorldObjectFactory.CreateWorldObject(biota);
+                    if (worldObject == null)
+                    {
+                        log.Warn($"[EQUIPMENT] Failed to create world object from biota {biota.Id} for {Name} (0x{Guid})");
+                        continue;
+                    }
 
-                AddItemToEquippedItemsRatingCache(worldObject);
+                    var slot = worldObject.CurrentWieldedLocation ?? EquipMask.None;
+                    
+                    if (!itemsBySlot.ContainsKey(slot))
+                        itemsBySlot[slot] = new List<WorldObject>();
+                    
+                    itemsBySlot[slot].Add(worldObject);
+                }
+                catch (Exception ex)
+                {
+                    log.Error($"[EQUIPMENT] Exception creating world object from biota {biota.Id} for {Name} (0x{Guid}): {ex.GetFullMessage()}", ex);
+                }
+            }
 
-                EncumbranceVal += (worldObject.EncumbranceVal ?? 0);
+            // Second pass: Detect duplicates and mark for unequipping
+            foreach (var kvp in itemsBySlot)
+            {
+                var slot = kvp.Key;
+                var items = kvp.Value;
+
+                if (items.Count > 1 && slot != EquipMask.None)
+                {
+                    log.Warn($"[EQUIPMENT] Duplicate equipment slot detected for {Name} (0x{Guid}): Slot {slot} has {items.Count} items");
+                    
+                    // Keep the first item, mark the rest for unequipping
+                    for (int i = 1; i < items.Count; i++)
+                    {
+                        itemsToUnequip.Add(items[i]);
+                        log.Warn($"[EQUIPMENT] Marking item {items[i].Name} (0x{items[i].Guid}) for unequip from slot {slot}");
+                    }
+                }
+            }
+
+            // Third pass: Add non-duplicate items to equipped objects
+            foreach (var kvp in itemsBySlot)
+            {
+                var items = kvp.Value;
+                var slot = kvp.Key;
+
+                // For slots with duplicates, only add the first item
+                // For slots without duplicates, add all items
+                var itemsToAdd = (items.Count > 1 && slot != EquipMask.None) ? items.Take(1) : items;
+
+                foreach (var worldObject in itemsToAdd)
+                {
+                    if (itemsToUnequip.Contains(worldObject))
+                        continue; // Skip items marked for unequipping
+
+                    EquippedObjects[worldObject.Guid] = worldObject;
+                    AddItemToEquippedItemsRatingCache(worldObject);
+                    EncumbranceVal += (worldObject.EncumbranceVal ?? 0);
+                }
             }
 
             EquippedObjectsLoaded = true;
+
+            // Fourth pass: Try to unequip duplicates to inventory (if player and has space)
+            if (itemsToUnequip.Count > 0 && this is Player player)
+            {
+                foreach (var duplicateItem in itemsToUnequip)
+                {
+                    try
+                    {
+                        // Safety check: Make sure item isn't already in inventory
+                        if (player.Inventory.ContainsKey(duplicateItem.Guid))
+                        {
+                            log.Warn($"[EQUIPMENT] Duplicate item {duplicateItem.Name} (0x{duplicateItem.Guid}) is already in inventory for {Name} - skipping unequip");
+                            // Still need to clear equipped properties
+                            duplicateItem.RemoveProperty(PropertyInt.CurrentWieldedLocation);
+                            duplicateItem.RemoveProperty(PropertyInstanceId.Wielder);
+                            duplicateItem.Wielder = null;
+                            continue;
+                        }
+
+                        // Check if player has inventory space
+                        if (player.CanAddToInventory(duplicateItem))
+                        {
+                            // Store original slot before removing
+                            var originalSlot = duplicateItem.CurrentWieldedLocation ?? EquipMask.None;
+                            
+                            // Remove from equipped (clear properties)
+                            duplicateItem.RemoveProperty(PropertyInt.CurrentWieldedLocation);
+                            duplicateItem.RemoveProperty(PropertyInstanceId.Wielder);
+                            duplicateItem.Wielder = null;
+                            // Clear ContainerId if set (should be null for equipped items, but be safe)
+                            if (duplicateItem.ContainerId.HasValue)
+                                duplicateItem.RemoveProperty(PropertyInstanceId.Container);
+                            // ContainerId will be set by TryAddToInventory
+
+                            // Add to inventory (no networking during construction - safe)
+                            if (player.TryAddToInventory(duplicateItem, limitToMainPackOnly: false, burdenCheck: true))
+                            {
+                                log.Info($"[EQUIPMENT] Successfully moved duplicate item {duplicateItem.Name} (0x{duplicateItem.Guid}) from slot {originalSlot} to inventory for {Name}");
+                            }
+                            else
+                            {
+                                log.Warn($"[EQUIPMENT] Failed to add duplicate item {duplicateItem.Name} (0x{duplicateItem.Guid}) to inventory for {Name} - re-equipping to prevent item loss");
+                                // Re-add to equipped to prevent item loss
+                                EquippedObjects[duplicateItem.Guid] = duplicateItem;
+                                AddItemToEquippedItemsRatingCache(duplicateItem);
+                                EncumbranceVal += (duplicateItem.EncumbranceVal ?? 0);
+                                // Restore properties
+                                duplicateItem.CurrentWieldedLocation = originalSlot;
+                                duplicateItem.WielderId = Biota.Id;
+                                duplicateItem.Wielder = this;
+                            }
+                        }
+                        else
+                        {
+                            log.Warn($"[EQUIPMENT] Cannot unequip duplicate item {duplicateItem.Name} (0x{duplicateItem.Guid}) - inventory full or insufficient burden for {Name}. Item will remain equipped.");
+                            // Re-add to equipped to prevent item loss
+                            EquippedObjects[duplicateItem.Guid] = duplicateItem;
+                            AddItemToEquippedItemsRatingCache(duplicateItem);
+                            EncumbranceVal += (duplicateItem.EncumbranceVal ?? 0);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        log.Error($"[EQUIPMENT] Exception handling duplicate item {duplicateItem.Name} (0x{duplicateItem.Guid}) for {Name}: {ex.GetFullMessage()}", ex);
+                        // Re-add to equipped to prevent item loss
+                        EquippedObjects[duplicateItem.Guid] = duplicateItem;
+                        AddItemToEquippedItemsRatingCache(duplicateItem);
+                        EncumbranceVal += (duplicateItem.EncumbranceVal ?? 0);
+                    }
+                }
+            }
+            else if (itemsToUnequip.Count > 0)
+            {
+                // Not a player - can't unequip to inventory, so keep them equipped and log warning
+                log.Warn($"[EQUIPMENT] Duplicate items detected for non-player {Name} (0x{Guid}) - cannot unequip to inventory. All items will remain equipped.");
+                foreach (var duplicateItem in itemsToUnequip)
+                {
+                    EquippedObjects[duplicateItem.Guid] = duplicateItem;
+                    AddItemToEquippedItemsRatingCache(duplicateItem);
+                    EncumbranceVal += (duplicateItem.EncumbranceVal ?? 0);
+                }
+            }
 
             SetChildren();
         }

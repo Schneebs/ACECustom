@@ -598,27 +598,111 @@ namespace ACE.Database
         {
             List<Biota> inventory = null;
             List<Biota> wieldedItems = null;
-            Parallel.Invoke(
-                () => inventory = GetInventoryInParallel(id, true),
-                () => wieldedItems = GetWieldedItemsInParallel(id));
+            
+            try
+            {
+                Parallel.Invoke(
+                    () => 
+                    {
+                        try
+                        {
+                            inventory = GetInventoryInParallel(id, true);
+                            log.Debug($"[TEST] GetInventoryInParallel completed for character {id}, found {inventory?.Count ?? 0} items");
+                        }
+                        catch (Exception ex)
+                        {
+                            log.Error($"[TEST] GetInventoryInParallel failed for character {id}: {ex.GetFullMessage()}", ex);
+                            throw; // Re-throw to see if it's caught
+                        }
+                    },
+                    () => 
+                    {
+                        try
+                        {
+                            wieldedItems = GetWieldedItemsInParallel(id);
+                            log.Debug($"[TEST] GetWieldedItemsInParallel completed for character {id}, found {wieldedItems?.Count ?? 0} items");
+                        }
+                        catch (Exception ex)
+                        {
+                            log.Error($"[TEST] GetWieldedItemsInParallel failed for character {id}: {ex.GetFullMessage()}", ex);
+                            throw;
+                        }
+                    });
+            }
+            catch (Exception ex)
+            {
+                log.Error($"[ERROR] GetPossessedBiotasInParallel failed for character {id}: {ex.GetFullMessage()}", ex);
+                // Don't re-throw - return failure state so callback fires and we can properly handle it
+                // The individual methods already have fallback mechanisms, so if we get here,
+                // something catastrophic happened - player should not be allowed to log in
+                var result = new PossessedBiotas(new List<Biota>(), new List<Biota>())
+                {
+                    LoadFailed = true,
+                    LoadFailureReason = $"Failed to load inventory/wielded items: {ex.GetFullMessage()}"
+                };
+                log.Error($"[ERROR] Item loading failed completely for character {id} - player will be disconnected");
+                return result;
+            }
 
-            //var inventory = GetInventoryInParallel(id, true);
-
-            //var wieldedItems = GetWieldedItemsInParallel(id);
-
-            return new PossessedBiotas(inventory, wieldedItems);
+            return new PossessedBiotas(inventory ?? new List<Biota>(), wieldedItems ?? new List<Biota>());
         }
 
         public List<Biota> GetInventoryInParallel(uint parentId, bool includedNestedItems)
         {
-            using (var context = new ShardDbContext())
+            try
             {
-                context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+                // TEST: Force exception for "Reawakener" to test black screen issue
+                // Character ID: 1342177282 (from logs)
+                // Set TEST_BLACK_SCREEN = true to test the original issue (no fallback)
+                const bool TEST_BLACK_SCREEN = false; // Set to true to test original black screen issue
+                const uint REAWAKENER_ID = 1342177282;
+                
+                if (TEST_BLACK_SCREEN && parentId == REAWAKENER_ID)
+                {
+                    log.Warn($"[TEST] Forcing exception for Reawakener (ID: {parentId}) - NO FALLBACK - testing original black screen issue");
+                    throw new Exception("TEST: Simulated database failure - testing original black screen issue");
+                }
+                
+                // Try the main method
+                return GetInventoryInParallel_Main(parentId, includedNestedItems);
+            }
+            catch (Exception ex)
+            {
+                log.Error($"[FALLBACK] GetInventoryInParallel failed for parentId {parentId}, attempting fallback: {ex.GetFullMessage()}", ex);
+                
+                // TEST: Set to true to simulate original black screen issue (no fallback, just re-throw)
+                const bool TEST_ORIGINAL_BLACK_SCREEN = false;
+                if (TEST_ORIGINAL_BLACK_SCREEN)
+                {
+                    log.Error($"[TEST] Simulating original behavior - re-throwing exception (no fallback) - player will get black screen");
+                    throw; // Re-throw to simulate original code behavior
+                }
+                
+                // Fallback to simpler method
+                try
+                {
+                    return GetInventoryInParallel_Fallback(parentId, includedNestedItems);
+                }
+                catch (Exception fallbackEx)
+                {
+                    log.Error($"[FALLBACK] Fallback method also failed for parentId {parentId}: {fallbackEx.GetFullMessage()}", fallbackEx);
+                    // Both methods failed - this is a critical failure
+                    log.Error($"[FALLBACK] Critical failure: Both main and fallback methods failed for parentId {parentId}");
+                    throw; // Re-throw so GetPossessedBiotasInParallel can mark LoadFailed
+                }
+            }
+        }
 
-                var results = context.BiotaPropertiesIID
-                    .Where(r => r.Type == (ushort)PropertyInstanceId.Container && r.Value == parentId)
-                    .Select(r => r.ObjectId)
-                    .ToList();
+        private List<Biota> GetInventoryInParallel_Main(uint parentId, bool includedNestedItems)
+        {
+            using (var context = new ShardDbContext())
+                {
+                    context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
+                    var results = context.BiotaPropertiesIID
+                        .Where(r => r.Type == (ushort)PropertyInstanceId.Container && r.Value == parentId)
+                        .Select(r => r.ObjectId)
+                        .ToList();
 
                 // Use parallel only for large result sets to avoid overhead
                 if (results.Count < 10)
@@ -662,11 +746,96 @@ namespace ACE.Database
                 });
 
                 return inventoryBag.ToList();
+                }
+        }
+
+        /// <summary>
+        /// Fallback method using simpler, more reliable approach if main method fails
+        /// </summary>
+        private List<Biota> GetInventoryInParallel_Fallback(uint parentId, bool includedNestedItems)
+        {
+            log.Info($"[FALLBACK] Using fallback method for parentId {parentId}");
+            
+            var inventory = new List<Biota>();
+            
+            try
+            {
+                using (var context = new ShardDbContext())
+                {
+                    context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
+                    var results = context.BiotaPropertiesIID
+                        .Where(r => r.Type == (ushort)PropertyInstanceId.Container && r.Value == parentId)
+                        .Select(r => r.ObjectId)
+                        .ToList();
+
+                    // Use sequential loading (more reliable, less performant)
+                    foreach (var result in results)
+                    {
+                        try
+                        {
+                            var biota = GetBiota(result);
+
+                            if (biota != null)
+                            {
+                                inventory.Add(biota);
+
+                                if (includedNestedItems && biota.WeenieType == (int)WeenieType.Container)
+                                {
+                                    // Recursively get nested items using fallback
+                                    var subItems = GetInventoryInParallel_Fallback(biota.Id, false);
+                                    inventory.AddRange(subItems);
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            log.Warn($"[FALLBACK] Failed to load item {result} for parentId {parentId}: {ex.Message}");
+                            // Continue with other items
+                        }
+                    }
+                }
+
+                log.Info($"[FALLBACK] Fallback method completed for parentId {parentId}, loaded {inventory.Count} items");
             }
+            catch (Exception ex)
+            {
+                // Even the fallback failed - log but return what we have (might be empty)
+                log.Error($"[FALLBACK] Fallback method failed completely for parentId {parentId}: {ex.GetFullMessage()}", ex);
+                log.Warn($"[FALLBACK] Returning partial inventory ({inventory.Count} items) for parentId {parentId}");
+            }
+            
+            return inventory;
         }
 
 
         public List<Biota> GetWieldedItemsInParallel(uint parentId)
+        {
+            try
+            {
+                // Try the main method
+                return GetWieldedItemsInParallel_Main(parentId);
+            }
+            catch (Exception ex)
+            {
+                log.Error($"[FALLBACK] GetWieldedItemsInParallel failed for parentId {parentId}, attempting fallback: {ex.GetFullMessage()}", ex);
+                
+                // Fallback to simpler method
+                try
+                {
+                    return GetWieldedItemsInParallel_Fallback(parentId);
+                }
+                catch (Exception fallbackEx)
+                {
+                    log.Error($"[FALLBACK] Fallback method also failed for parentId {parentId}: {fallbackEx.GetFullMessage()}", fallbackEx);
+                    // Both methods failed - this is a critical failure
+                    log.Error($"[FALLBACK] Critical failure: Both main and fallback methods failed for wielded items, parentId {parentId}");
+                    throw; // Re-throw so GetPossessedBiotasInParallel can mark LoadFailed
+                }
+            }
+        }
+
+        private List<Biota> GetWieldedItemsInParallel_Main(uint parentId)
         {
             var wieldedItems = new ConcurrentBag<Biota>();
             List<uint> results;
@@ -691,6 +860,55 @@ namespace ACE.Database
             
 
             return wieldedItems.ToList();
+        }
+
+        /// <summary>
+        /// Fallback method using simpler, more reliable approach if main method fails
+        /// </summary>
+        private List<Biota> GetWieldedItemsInParallel_Fallback(uint parentId)
+        {
+            log.Info($"[FALLBACK] Using fallback method for wielded items, parentId {parentId}");
+            
+            var wieldedItems = new List<Biota>();
+            
+            try
+            {
+                using (var context = new ShardDbContext())
+                {
+                    context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
+                    var results = context.BiotaPropertiesIID
+                        .Where(r => r.Type == (ushort)PropertyInstanceId.Wielder && r.Value == parentId)
+                        .Select(r => r.ObjectId)
+                        .ToList();
+
+                    // Use sequential loading (more reliable, less performant)
+                    foreach (var result in results)
+                    {
+                        try
+                        {
+                            var biota = GetBiota(result);
+                            if (biota != null)
+                                wieldedItems.Add(biota);
+                        }
+                        catch (Exception ex)
+                        {
+                            log.Warn($"[FALLBACK] Failed to load wielded item {result} for parentId {parentId}: {ex.Message}");
+                            // Continue with other items
+                        }
+                    }
+                }
+
+                log.Info($"[FALLBACK] Fallback method completed for wielded items, parentId {parentId}, loaded {wieldedItems.Count} items");
+            }
+            catch (Exception ex)
+            {
+                // Even the fallback failed - log but return what we have (might be empty)
+                log.Error($"[FALLBACK] Fallback method failed completely for wielded items, parentId {parentId}: {ex.GetFullMessage()}", ex);
+                log.Warn($"[FALLBACK] Returning partial wielded items ({wieldedItems.Count} items) for parentId {parentId}");
+            }
+            
+            return wieldedItems;
         }
 
         public List<Biota> GetStaticObjectsByLandblock(ushort landblockId, int? variationId = null)
@@ -1248,3 +1466,4 @@ namespace ACE.Database
         }
     }
 }
+

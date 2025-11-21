@@ -149,9 +149,28 @@ namespace ACE.Server.Managers
             DatabaseManager.Shard.GetCharacter(character.Id, fullCharacter =>
             {
                 var start = DateTime.UtcNow;
+                log.Info($"[TEST] Starting GetPossessedBiotasInParallel for {character.Name} (ID: {character.Id})");
                 DatabaseManager.Shard.GetPossessedBiotasInParallel(character.Id, biotas =>
                 {
+                    log.Info($"[TEST] Callback fired for {character.Name} (ID: {character.Id}) - Inventory: {biotas?.Inventory?.Count ?? 0} items, Wielded: {biotas?.WieldedItems?.Count ?? 0} items");
                     log.Debug($"GetPossessedBiotasInParallel for {character.Name} took {(DateTime.UtcNow - start).TotalMilliseconds:N0} ms, Queue Size: {DatabaseManager.Shard.QueueCount}");
+                    
+                    // Check if item loading failed
+                    if (biotas != null && biotas.LoadFailed)
+                    {
+                        log.Error($"[LOGIN] Item loading failed for {character.Name} (ID: {character.Id}): {biotas.LoadFailureReason}");
+                        log.Error($"[LOGIN] Disconnecting {character.Name} - cannot log in without items loaded");
+                        
+                        // Disconnect the player with an error message
+                        if (session != null)
+                        {
+                            var errorMessage = $"Failed to load character inventory. Please try again later. Error: {biotas.LoadFailureReason}";
+                            session.Terminate(Network.Enum.SessionTerminationReason.AccountSelectCallbackException, 
+                                new GameMessageBootAccount($" because {errorMessage}"));
+                        }
+                        return;
+                    }
+                    
                     ActionQueue.EnqueueAction(new ActionEventDelegate(ActionType.WorldManager_DoPlayerEnterWorld, () => DoPlayerEnterWorld(session, fullCharacter, offlinePlayer.Biota, biotas)));
                 });
             });            

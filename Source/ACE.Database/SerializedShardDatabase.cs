@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 using log4net;
 
+using ACE.Common.Extensions;
 using ACE.Database.Entity;
 using ACE.Database.Models.Shard;
 using ACE.Entity.Enum;
@@ -292,8 +293,23 @@ namespace ACE.Database
         {
             _readOnlyQueue.Add(new Task((x) =>
             {
-                var c = BaseDatabase.GetPossessedBiotasInParallel(id);
-                callback?.Invoke(c);
+                try
+                {
+                    var c = BaseDatabase.GetPossessedBiotasInParallel(id);
+                    callback?.Invoke(c);
+                }
+                catch (Exception ex)
+                {
+                    // Ensure callback always fires, even on catastrophic failure
+                    // Mark as failed so player is not allowed to log in
+                    log.Error($"[ERROR] GetPossessedBiotasInParallel task failed for character {id}: {ex.GetFullMessage()}", ex);
+                    var failedResult = new PossessedBiotas(new List<Biota>(), new List<Biota>())
+                    {
+                        LoadFailed = true,
+                        LoadFailureReason = $"Task execution failed: {ex.GetFullMessage()}"
+                    };
+                    callback?.Invoke(failedResult);
+                }
             }, "GetPossessedBiotasInParallel: " + id));
         }
 
