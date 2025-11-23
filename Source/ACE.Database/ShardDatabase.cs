@@ -234,50 +234,49 @@ namespace ACE.Database
             biota.PopulatedCollectionFlags = (uint)populatedCollectionFlags;
         }
 
-        public virtual Biota GetBiota(ShardDbContext context, uint id, bool doNotAddToCache = false)
+        public virtual Biota GetBiota(ShardDbContext context, uint id, bool skipCache = false)
         {
+            // Use eager loading with Include to avoid N+1 query problem
+            // AsSplitQuery() prevents Cartesian explosion with multiple collections
             var biota = context.Biota
+                .Include(b => b.BiotaPropertiesAnimPart)
+                .Include(b => b.BiotaPropertiesAttribute)
+                .Include(b => b.BiotaPropertiesAttribute2nd)
+                .Include(b => b.BiotaPropertiesBodyPart)
+                .Include(b => b.BiotaPropertiesBook)
+                .Include(b => b.BiotaPropertiesBookPageData)
+                .Include(b => b.BiotaPropertiesBool)
+                .Include(b => b.BiotaPropertiesCreateList)
+                .Include(b => b.BiotaPropertiesDID)
+                .Include(b => b.BiotaPropertiesEmote)
+                    .ThenInclude(e => e.BiotaPropertiesEmoteAction)
+                .Include(b => b.BiotaPropertiesEnchantmentRegistry)
+                .Include(b => b.BiotaPropertiesEventFilter)
+                .Include(b => b.BiotaPropertiesFloat)
+                .Include(b => b.BiotaPropertiesGenerator)
+                .Include(b => b.BiotaPropertiesIID)
+                .Include(b => b.BiotaPropertiesInt)
+                .Include(b => b.BiotaPropertiesInt64)
+                .Include(b => b.BiotaPropertiesPalette)
+                .Include(b => b.BiotaPropertiesPosition)
+                .Include(b => b.BiotaPropertiesSkill)
+                .Include(b => b.BiotaPropertiesSpellBook)
+                .Include(b => b.BiotaPropertiesString)
+                .Include(b => b.BiotaPropertiesTextureMap)
+                .Include(b => b.HousePermission)
+                .Include(b => b.BiotaPropertiesAllegiance)
+                .AsSplitQuery()
                 .FirstOrDefault(r => r.Id == id);
-
-            if (biota == null)
-                return null;
-
-            PopulatedCollectionFlags populatedCollectionFlags = (PopulatedCollectionFlags)biota.PopulatedCollectionFlags;
-
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesAnimPart)) biota.BiotaPropertiesAnimPart = context.BiotaPropertiesAnimPart.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesAttribute)) biota.BiotaPropertiesAttribute = context.BiotaPropertiesAttribute.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesAttribute2nd)) biota.BiotaPropertiesAttribute2nd = context.BiotaPropertiesAttribute2nd.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesBodyPart)) biota.BiotaPropertiesBodyPart = context.BiotaPropertiesBodyPart.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesBook)) biota.BiotaPropertiesBook = context.BiotaPropertiesBook.FirstOrDefault(r => r.ObjectId == biota.Id);
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesBookPageData)) biota.BiotaPropertiesBookPageData = context.BiotaPropertiesBookPageData.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesBool)) biota.BiotaPropertiesBool = context.BiotaPropertiesBool.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesCreateList)) biota.BiotaPropertiesCreateList = context.BiotaPropertiesCreateList.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesDID)) biota.BiotaPropertiesDID = context.BiotaPropertiesDID.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesEmote)) biota.BiotaPropertiesEmote = context.BiotaPropertiesEmote.Include(r => r.BiotaPropertiesEmoteAction).Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesEnchantmentRegistry)) biota.BiotaPropertiesEnchantmentRegistry = context.BiotaPropertiesEnchantmentRegistry.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesEventFilter)) biota.BiotaPropertiesEventFilter = context.BiotaPropertiesEventFilter.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesFloat)) biota.BiotaPropertiesFloat = context.BiotaPropertiesFloat.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesGenerator)) biota.BiotaPropertiesGenerator = context.BiotaPropertiesGenerator.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesIID)) biota.BiotaPropertiesIID = context.BiotaPropertiesIID.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesInt)) biota.BiotaPropertiesInt = context.BiotaPropertiesInt.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesInt64)) biota.BiotaPropertiesInt64 = context.BiotaPropertiesInt64.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesPalette)) biota.BiotaPropertiesPalette = context.BiotaPropertiesPalette.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesPosition)) biota.BiotaPropertiesPosition = context.BiotaPropertiesPosition.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesSkill)) biota.BiotaPropertiesSkill = context.BiotaPropertiesSkill.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesSpellBook)) biota.BiotaPropertiesSpellBook = context.BiotaPropertiesSpellBook.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesString)) biota.BiotaPropertiesString = context.BiotaPropertiesString.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesTextureMap)) biota.BiotaPropertiesTextureMap = context.BiotaPropertiesTextureMap.Where(r => r.ObjectId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.HousePermission)) biota.HousePermission = context.HousePermission.Where(r => r.HouseId == biota.Id).ToList();
-            if (populatedCollectionFlags.HasFlag(PopulatedCollectionFlags.BiotaPropertiesAllegiance)) biota.BiotaPropertiesAllegiance = context.BiotaPropertiesAllegiance.Where(r => r.AllegianceId == biota.Id).ToList();
 
             return biota;
         }
 
-        public virtual Biota GetBiota(uint id, bool doNotAddToCache = false)
+        public virtual Biota GetBiota(uint id, bool skipCache = false)
         {
             using (var context = new ShardDbContext())
             {
-                return GetBiota(context, id, doNotAddToCache);
+                context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+                return GetBiota(context, id, skipCache);
             }
         }
 
@@ -287,14 +286,39 @@ namespace ACE.Database
             {
                 context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
-                var results = context.Biota.Where(r => r.WeenieClassId == wcid).Select(r => r.Id);
+                var ids = context.Biota.Where(r => r.WeenieClassId == wcid).Select(r => r.Id).ToList();
 
-                var biotas = new List<Biota>();
-                foreach (var result in results)
-                {
-                    var biota = GetBiota(result);
-                    biotas.Add(biota);
-                }
+                // Use batch query with eager loading instead of N+1 individual queries
+                var biotas = context.Biota
+                    .Include(b => b.BiotaPropertiesAnimPart)
+                    .Include(b => b.BiotaPropertiesAttribute)
+                    .Include(b => b.BiotaPropertiesAttribute2nd)
+                    .Include(b => b.BiotaPropertiesBodyPart)
+                    .Include(b => b.BiotaPropertiesBook)
+                    .Include(b => b.BiotaPropertiesBookPageData)
+                    .Include(b => b.BiotaPropertiesBool)
+                    .Include(b => b.BiotaPropertiesCreateList)
+                    .Include(b => b.BiotaPropertiesDID)
+                    .Include(b => b.BiotaPropertiesEmote)
+                        .ThenInclude(e => e.BiotaPropertiesEmoteAction)
+                    .Include(b => b.BiotaPropertiesEnchantmentRegistry)
+                    .Include(b => b.BiotaPropertiesEventFilter)
+                    .Include(b => b.BiotaPropertiesFloat)
+                    .Include(b => b.BiotaPropertiesGenerator)
+                    .Include(b => b.BiotaPropertiesIID)
+                    .Include(b => b.BiotaPropertiesInt)
+                    .Include(b => b.BiotaPropertiesInt64)
+                    .Include(b => b.BiotaPropertiesPalette)
+                    .Include(b => b.BiotaPropertiesPosition)
+                    .Include(b => b.BiotaPropertiesSkill)
+                    .Include(b => b.BiotaPropertiesSpellBook)
+                    .Include(b => b.BiotaPropertiesString)
+                    .Include(b => b.BiotaPropertiesTextureMap)
+                    .Include(b => b.HousePermission)
+                    .Include(b => b.BiotaPropertiesAllegiance)
+                    .AsSplitQuery()
+                    .Where(b => ids.Contains(b.Id))
+                    .ToList();
 
                 return biotas;
             }
@@ -309,14 +333,39 @@ namespace ACE.Database
 
                 var iType = (int)type;
 
-                var results = context.Biota.Where(r => r.WeenieType == iType).Select(r => r.Id);
+                var ids = context.Biota.Where(r => r.WeenieType == iType).Select(r => r.Id).ToList();
 
-                var biotas = new List<Biota>();
-                foreach (var result in results)
-                {
-                    var biota = GetBiota(result);
-                    biotas.Add(biota);
-                }
+                // Use batch query with eager loading instead of N+1 individual queries
+                var biotas = context.Biota
+                    .Include(b => b.BiotaPropertiesAnimPart)
+                    .Include(b => b.BiotaPropertiesAttribute)
+                    .Include(b => b.BiotaPropertiesAttribute2nd)
+                    .Include(b => b.BiotaPropertiesBodyPart)
+                    .Include(b => b.BiotaPropertiesBook)
+                    .Include(b => b.BiotaPropertiesBookPageData)
+                    .Include(b => b.BiotaPropertiesBool)
+                    .Include(b => b.BiotaPropertiesCreateList)
+                    .Include(b => b.BiotaPropertiesDID)
+                    .Include(b => b.BiotaPropertiesEmote)
+                        .ThenInclude(e => e.BiotaPropertiesEmoteAction)
+                    .Include(b => b.BiotaPropertiesEnchantmentRegistry)
+                    .Include(b => b.BiotaPropertiesEventFilter)
+                    .Include(b => b.BiotaPropertiesFloat)
+                    .Include(b => b.BiotaPropertiesGenerator)
+                    .Include(b => b.BiotaPropertiesIID)
+                    .Include(b => b.BiotaPropertiesInt)
+                    .Include(b => b.BiotaPropertiesInt64)
+                    .Include(b => b.BiotaPropertiesPalette)
+                    .Include(b => b.BiotaPropertiesPosition)
+                    .Include(b => b.BiotaPropertiesSkill)
+                    .Include(b => b.BiotaPropertiesSpellBook)
+                    .Include(b => b.BiotaPropertiesString)
+                    .Include(b => b.BiotaPropertiesTextureMap)
+                    .Include(b => b.HousePermission)
+                    .Include(b => b.BiotaPropertiesAllegiance)
+                    .AsSplitQuery()
+                    .Where(b => ids.Contains(b.Id))
+                    .ToList();
 
                 return biotas;
             }
@@ -387,15 +436,106 @@ namespace ACE.Database
             }
         }
 
-        public bool SaveBiotasInParallel(IEnumerable<(ACE.Entity.Models.Biota biota, ReaderWriterLockSlim rwLock)> biotas)
+        public virtual bool SaveBiotasInParallel(IEnumerable<(ACE.Entity.Models.Biota biota, ReaderWriterLockSlim rwLock)> biotas)
         {
-            return Parallel.ForEach(biotas, (biota, state) =>
+            var biotaList = biotas.ToList();
+            
+            if (biotaList.Count == 0)
+                return true;
+
+            // Single transaction for all biotas improves performance
+            using (var context = new ShardDbContext())
             {
-                if (!SaveBiota(biota.biota, biota.rwLock))
+                // Load all existing biotas with their collections in one query to prevent duplicate key errors
+                var biotaIds = biotaList.Select(x => x.biota.Id).ToList();
+                var existingBiotas = context.Biota
+                    .Include(b => b.BiotaPropertiesAllegiance)
+                    .Include(b => b.BiotaPropertiesAnimPart)
+                    .Include(b => b.BiotaPropertiesAttribute)
+                    .Include(b => b.BiotaPropertiesAttribute2nd)
+                    .Include(b => b.BiotaPropertiesBodyPart)
+                    .Include(b => b.BiotaPropertiesBook)
+                    .Include(b => b.BiotaPropertiesBookPageData)
+                    .Include(b => b.BiotaPropertiesBool)
+                    .Include(b => b.BiotaPropertiesCreateList)
+                    .Include(b => b.BiotaPropertiesDID)
+                    .Include(b => b.BiotaPropertiesEmote)
+                        .ThenInclude(e => e.BiotaPropertiesEmoteAction)
+                    .Include(b => b.BiotaPropertiesEnchantmentRegistry)
+                    .Include(b => b.BiotaPropertiesEventFilter)
+                    .Include(b => b.BiotaPropertiesFloat)
+                    .Include(b => b.BiotaPropertiesGenerator)
+                    .Include(b => b.BiotaPropertiesIID)
+                    .Include(b => b.BiotaPropertiesInt)
+                    .Include(b => b.BiotaPropertiesInt64)
+                    .Include(b => b.BiotaPropertiesPalette)
+                    .Include(b => b.BiotaPropertiesPosition)
+                    .Include(b => b.BiotaPropertiesSkill)
+                    .Include(b => b.BiotaPropertiesSpellBook)
+                    .Include(b => b.BiotaPropertiesString)
+                    .Include(b => b.BiotaPropertiesTextureMap)
+                    .Include(b => b.HousePermission)
+                    .AsSplitQuery()
+                    .Where(b => biotaIds.Contains(b.Id))
+                    .ToDictionary(b => b.Id);
+
+                foreach (var (biota, rwLock) in biotaList)
                 {
-                    state.Stop();
+                    rwLock.EnterReadLock();
+                    try
+                    {
+                        if (!existingBiotas.TryGetValue(biota.Id, out var existingBiota))
+                        {
+                            // New biota - convert and add to context
+                            existingBiota = ACE.Database.Adapter.BiotaConverter.ConvertFromEntityBiota(biota);
+                            context.Biota.Add(existingBiota);
+                            existingBiotas[biota.Id] = existingBiota; // Track for subsequent operations
+                        }
+                        else
+                        {
+                            // Existing biota - update in place
+                            ACE.Database.Adapter.BiotaUpdater.UpdateDatabaseBiota(context, biota, existingBiota);
+                        }
+                        
+                        SetBiotaPopulatedCollections(existingBiota);
+                    }
+                    finally
+                    {
+                        rwLock.ExitReadLock();
+                    }
                 }
-            }).IsCompleted;
+
+                // Single SaveChanges for all biotas
+                Exception firstException = null;
+                retry:
+
+                try
+                {
+                    context.SaveChanges();
+
+                    if (firstException != null)
+                        log.Debug($"[DATABASE] SaveBiotasInParallel (count: {biotaList.Count}) retry succeeded after initial exception of: {firstException.GetFullMessage()}");
+
+                    return true;
+                }
+                catch (DbUpdateConcurrencyException dbex)
+                {
+                    log.Error($"[DATABASE] SaveBiotasInParallel (count: {biotaList.Count}) failed with DbUpdateConcurrencyException: {dbex.GetFullMessage()}");
+                    return true; // data will re-save at a later point
+                }
+                catch (Exception ex)
+                {
+                    if (firstException == null)
+                    {
+                        firstException = ex;
+                        goto retry;
+                    }
+
+                    log.Error($"[DATABASE] SaveBiotasInParallel (count: {biotaList.Count}) failed first attempt with exception: {firstException.GetFullMessage()}");
+                    log.Error($"[DATABASE] SaveBiotasInParallel (count: {biotaList.Count}) failed second attempt with exception: {ex.GetFullMessage()}");
+                    return false;
+                }
+            }
         }
 
 
@@ -458,82 +598,284 @@ namespace ACE.Database
         {
             List<Biota> inventory = null;
             List<Biota> wieldedItems = null;
-            Parallel.Invoke(
-                () => inventory = GetInventoryInParallel(id, true),
-                () => wieldedItems = GetWieldedItemsInParallel(id));
+            
+            try
+            {
+                Parallel.Invoke(
+                    () => 
+                    {
+                        try
+                        {
+                            inventory = GetInventoryInParallel(id, true);
+                        }
+                        catch (Exception ex)
+                        {
+                            log.Error($"[DATABASE] GetPossessedBiotasInParallel failed to load inventory for character 0x{id:X8}: {ex.GetFullMessage()}");
+                            inventory = new List<Biota>(); // Ensure non-null
+                        }
+                    },
+                    () => 
+                    {
+                        try
+                        {
+                            wieldedItems = GetWieldedItemsInParallel(id);
+                        }
+                        catch (Exception ex)
+                        {
+                            log.Error($"[DATABASE] GetPossessedBiotasInParallel failed to load wielded items for character 0x{id:X8}: {ex.GetFullMessage()}");
+                            wieldedItems = new List<Biota>(); // Ensure non-null
+                        }
+                    });
+            }
+            catch (AggregateException ex)
+            {
+                log.Error($"[DATABASE] GetPossessedBiotasInParallel Parallel.Invoke failed for character 0x{id:X8}: {ex.GetFullMessage()}");
+                
+                // Ensure both collections are initialized
+                if (inventory == null)
+                    inventory = new List<Biota>();
+                if (wieldedItems == null)
+                    wieldedItems = new List<Biota>();
+            }
+            catch (Exception ex)
+            {
+                log.Error($"[DATABASE] GetPossessedBiotasInParallel failed catastrophically for character 0x{id:X8}: {ex.GetFullMessage()}");
+                
+                // Ensure both collections are initialized
+                if (inventory == null)
+                    inventory = new List<Biota>();
+                if (wieldedItems == null)
+                    wieldedItems = new List<Biota>();
+            }
 
-            //var inventory = GetInventoryInParallel(id, true);
-
-            //var wieldedItems = GetWieldedItemsInParallel(id);
-
-            return new PossessedBiotas(inventory, wieldedItems);
+            return new PossessedBiotas(inventory ?? new List<Biota>(), wieldedItems ?? new List<Biota>());
         }
 
         public List<Biota> GetInventoryInParallel(uint parentId, bool includedNestedItems)
         {
-            using (var context = new ShardDbContext())
+            try
             {
-                context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
-
-                var results = context.BiotaPropertiesIID
-                    .Where(r => r.Type == (ushort)PropertyInstanceId.Container && r.Value == parentId)
-                    .Select(r => r.ObjectId)
-                    .ToList();
-
-                var inventory = new List<Biota>();
-
-                Parallel.ForEach(results, ConfigManager.Config.Server.Threading.DatabaseParallelOptions, result =>
+                using (var context = new ShardDbContext())
                 {
-                    var biota = GetBiota(result);
+                    context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
-                    if (biota != null)
+                    var results = context.BiotaPropertiesIID
+                        .Where(r => r.Type == (ushort)PropertyInstanceId.Container && r.Value == parentId)
+                        .Select(r => r.ObjectId)
+                        .ToList();
+
+                    // Use parallel only for large result sets to avoid overhead
+                    if (results.Count < 10)
                     {
-                        inventory.Add(biota);
-
-                        if (includedNestedItems && biota.WeenieType == (int)WeenieType.Container)
+                        var inventory = new List<Biota>();
+                        foreach (var result in results)
                         {
-                            var subItems = GetInventoryInParallel(biota.Id, false);
-                            inventory.AddRange(subItems);
-                        }
-                    }
-                });
+                            try
+                            {
+                                var biota = GetBiota(result);
 
-                return inventory;
+                                if (biota != null)
+                                {
+                                    inventory.Add(biota);
+
+                                    if (includedNestedItems && biota.WeenieType == (int)WeenieType.Container)
+                                    {
+                                        var subItems = GetInventoryInParallel(biota.Id, false);
+                                        inventory.AddRange(subItems);
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                log.Error($"[DATABASE] GetInventoryInParallel failed to load biota 0x{result:X8} for parent 0x{parentId:X8}: {ex.GetFullMessage()}");
+                                // Continue loading other items
+                            }
+                        }
+                        return inventory;
+                    }
+
+                    try
+                    {
+                        // FIX: Batch load all biotas in ONE query instead of N queries
+                        var biotas = context.Biota
+                            .Include(b => b.BiotaPropertiesAnimPart)
+                            .Include(b => b.BiotaPropertiesAttribute)
+                            .Include(b => b.BiotaPropertiesAttribute2nd)
+                            .Include(b => b.BiotaPropertiesBodyPart)
+                            .Include(b => b.BiotaPropertiesBook)
+                            .Include(b => b.BiotaPropertiesBookPageData)
+                            .Include(b => b.BiotaPropertiesBool)
+                            .Include(b => b.BiotaPropertiesCreateList)
+                            .Include(b => b.BiotaPropertiesDID)
+                            .Include(b => b.BiotaPropertiesEmote)
+                                .ThenInclude(e => e.BiotaPropertiesEmoteAction)
+                            .Include(b => b.BiotaPropertiesEnchantmentRegistry)
+                            .Include(b => b.BiotaPropertiesEventFilter)
+                            .Include(b => b.BiotaPropertiesFloat)
+                            .Include(b => b.BiotaPropertiesGenerator)
+                            .Include(b => b.BiotaPropertiesIID)
+                            .Include(b => b.BiotaPropertiesInt)
+                            .Include(b => b.BiotaPropertiesInt64)
+                            .Include(b => b.BiotaPropertiesPalette)
+                            .Include(b => b.BiotaPropertiesPosition)
+                            .Include(b => b.BiotaPropertiesSkill)
+                            .Include(b => b.BiotaPropertiesSpellBook)
+                            .Include(b => b.BiotaPropertiesString)
+                            .Include(b => b.BiotaPropertiesTextureMap)
+                            .Include(b => b.HousePermission)
+                            .Include(b => b.BiotaPropertiesAllegiance)
+                            .AsSplitQuery()
+                            .Where(b => results.Contains(b.Id))
+                            .ToList();
+
+                        // Process nested containers if needed
+                        if (includedNestedItems)
+                        {
+                            var containers = biotas.Where(b => b.WeenieType == (int)WeenieType.Container).ToList();
+                            foreach (var container in containers)
+                            {
+                                try
+                                {
+                                    var subItems = GetInventoryInParallel(container.Id, false);
+                                    biotas.AddRange(subItems);
+                                }
+                                catch (Exception ex)
+                                {
+                                    log.Error($"[DATABASE] GetInventoryInParallel failed to load nested items for container 0x{container.Id:X8}: {ex.GetFullMessage()}");
+                                    // Continue loading other containers
+                                }
+                            }
+                        }
+
+                        return biotas;
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        log.Error($"[DATABASE] GetInventoryInParallel batch load failed for parent 0x{parentId:X8} with InvalidOperationException (likely database connection issue): {ex.GetFullMessage()}");
+                        
+                        // Fallback to individual loading
+                        log.Warn($"[DATABASE] Falling back to individual item loading for parent 0x{parentId:X8}");
+                        var fallbackInventory = new List<Biota>();
+                        foreach (var result in results)
+                        {
+                            try
+                            {
+                                var biota = GetBiota(result);
+                                if (biota != null)
+                                    fallbackInventory.Add(biota);
+                            }
+                            catch (Exception fallbackEx)
+                            {
+                                log.Error($"[DATABASE] Fallback load also failed for biota 0x{result:X8}: {fallbackEx.GetFullMessage()}");
+                            }
+                        }
+                        return fallbackInventory;
+                    }
+                    catch (TimeoutException ex)
+                    {
+                        log.Error($"[DATABASE] GetInventoryInParallel batch load timed out for parent 0x{parentId:X8}: {ex.GetFullMessage()}");
+                        return new List<Biota>(); // Return empty list on timeout
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"[DATABASE] GetInventoryInParallel failed catastrophically for parent 0x{parentId:X8}: {ex.GetFullMessage()}");
+                return new List<Biota>(); // Return empty list rather than crashing
             }
         }
 
 
         public List<Biota> GetWieldedItemsInParallel(uint parentId)
         {
-            var wieldedItems = new ConcurrentBag<Biota>();
-            List<uint> results;
-
-            using (var context = new ShardDbContext())
+            try
             {
-                context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+                using (var context = new ShardDbContext())
+                {
+                    context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
-                results = context.BiotaPropertiesIID
-                    .Where(r => r.Type == (ushort)PropertyInstanceId.Wielder && r.Value == parentId)
-                    .Select(r => r.ObjectId)
-                    .ToList();
+                    var results = context.BiotaPropertiesIID
+                        .Where(r => r.Type == (ushort)PropertyInstanceId.Wielder && r.Value == parentId)
+                        .Select(r => r.ObjectId)
+                        .ToList();
+
+                    if (results.Count == 0)
+                        return new List<Biota>();
+
+                    try
+                    {
+                        // FIX: Batch load all wielded items in ONE query
+                        var wieldedItems = context.Biota
+                            .Include(b => b.BiotaPropertiesAnimPart)
+                            .Include(b => b.BiotaPropertiesAttribute)
+                            .Include(b => b.BiotaPropertiesAttribute2nd)
+                            .Include(b => b.BiotaPropertiesBodyPart)
+                            .Include(b => b.BiotaPropertiesBook)
+                            .Include(b => b.BiotaPropertiesBookPageData)
+                            .Include(b => b.BiotaPropertiesBool)
+                            .Include(b => b.BiotaPropertiesCreateList)
+                            .Include(b => b.BiotaPropertiesDID)
+                            .Include(b => b.BiotaPropertiesEmote)
+                                .ThenInclude(e => e.BiotaPropertiesEmoteAction)
+                            .Include(b => b.BiotaPropertiesEnchantmentRegistry)
+                            .Include(b => b.BiotaPropertiesEventFilter)
+                            .Include(b => b.BiotaPropertiesFloat)
+                            .Include(b => b.BiotaPropertiesGenerator)
+                            .Include(b => b.BiotaPropertiesIID)
+                            .Include(b => b.BiotaPropertiesInt)
+                            .Include(b => b.BiotaPropertiesInt64)
+                            .Include(b => b.BiotaPropertiesPalette)
+                            .Include(b => b.BiotaPropertiesPosition)
+                            .Include(b => b.BiotaPropertiesSkill)
+                            .Include(b => b.BiotaPropertiesSpellBook)
+                            .Include(b => b.BiotaPropertiesString)
+                            .Include(b => b.BiotaPropertiesTextureMap)
+                            .Include(b => b.HousePermission)
+                            .Include(b => b.BiotaPropertiesAllegiance)
+                            .AsSplitQuery()
+                            .Where(b => results.Contains(b.Id))
+                            .ToList();
+
+                        return wieldedItems;
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        log.Error($"[DATABASE] GetWieldedItemsInParallel batch load failed for parent 0x{parentId:X8} with InvalidOperationException: {ex.GetFullMessage()}");
+                        
+                        // Fallback to individual loading
+                        log.Warn($"[DATABASE] Falling back to individual wielded item loading for parent 0x{parentId:X8}");
+                        var fallbackItems = new List<Biota>();
+                        foreach (var result in results)
+                        {
+                            try
+                            {
+                                var biota = GetBiota(result);
+                                if (biota != null)
+                                    fallbackItems.Add(biota);
+                            }
+                            catch (Exception fallbackEx)
+                            {
+                                log.Error($"[DATABASE] Fallback load also failed for wielded biota 0x{result:X8}: {fallbackEx.GetFullMessage()}");
+                            }
+                        }
+                        return fallbackItems;
+                    }
+                    catch (TimeoutException ex)
+                    {
+                        log.Error($"[DATABASE] GetWieldedItemsInParallel batch load timed out for parent 0x{parentId:X8}: {ex.GetFullMessage()}");
+                        return new List<Biota>(); // Return empty list on timeout
+                    }
+                }
             }
-
-            Parallel.ForEach(results, ConfigManager.Config.Server.Threading.DatabaseParallelOptions, result =>
+            catch (Exception ex)
             {
-                var biota = GetBiota(result);
-
-                if (biota != null)
-                    wieldedItems.Add(biota);
-            });
-            
-
-            return wieldedItems.ToList();
+                log.Error($"[DATABASE] GetWieldedItemsInParallel failed catastrophically for parent 0x{parentId:X8}: {ex.GetFullMessage()}");
+                return new List<Biota>(); // Return empty list rather than crashing
+            }
         }
 
         public List<Biota> GetStaticObjectsByLandblock(ushort landblockId, int? variationId = null)
         {
-            var staticObjects = new List<Biota>();
-
             var staticLandblockId = (uint)(0x70000 | landblockId);
 
             var min = staticLandblockId << 12;
@@ -543,33 +885,52 @@ namespace ACE.Database
             {
                 context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
-                var results = context.Biota.Where(b => b.Id >= min && b.Id <= max).Select(r => r.Id).ToList();
+                // Use single batch query with eager loading instead of N+1 individual queries
+                var query = context.Biota
+                    .Include(b => b.BiotaPropertiesAnimPart)
+                    .Include(b => b.BiotaPropertiesAttribute)
+                    .Include(b => b.BiotaPropertiesAttribute2nd)
+                    .Include(b => b.BiotaPropertiesBodyPart)
+                    .Include(b => b.BiotaPropertiesBook)
+                    .Include(b => b.BiotaPropertiesBookPageData)
+                    .Include(b => b.BiotaPropertiesBool)
+                    .Include(b => b.BiotaPropertiesCreateList)
+                    .Include(b => b.BiotaPropertiesDID)
+                    .Include(b => b.BiotaPropertiesEmote)
+                        .ThenInclude(e => e.BiotaPropertiesEmoteAction)
+                    .Include(b => b.BiotaPropertiesEnchantmentRegistry)
+                    .Include(b => b.BiotaPropertiesEventFilter)
+                    .Include(b => b.BiotaPropertiesFloat)
+                    .Include(b => b.BiotaPropertiesGenerator)
+                    .Include(b => b.BiotaPropertiesIID)
+                    .Include(b => b.BiotaPropertiesInt)
+                    .Include(b => b.BiotaPropertiesInt64)
+                    .Include(b => b.BiotaPropertiesPalette)
+                    .Include(b => b.BiotaPropertiesPosition)
+                    .Include(b => b.BiotaPropertiesSkill)
+                    .Include(b => b.BiotaPropertiesSpellBook)
+                    .Include(b => b.BiotaPropertiesString)
+                    .Include(b => b.BiotaPropertiesTextureMap)
+                    .Include(b => b.HousePermission)
+                    .Include(b => b.BiotaPropertiesAllegiance)
+                    .AsSplitQuery()
+                    .Where(b => b.Id >= min && b.Id <= max);
 
-                foreach (var result in results)
+                if (variationId.HasValue)
                 {
-                    var biota = GetBiota(result);
-                    if (variationId.HasValue)
-                    {
-                        if (biota.BiotaPropertiesPosition.Any(x=>x.VariationId == variationId)) //filter to only the objects that are the correct variation
-                        {
-                            staticObjects.Add(biota);
-                        }
-                    }
-                    else //no variation id specified, so return all objects`
-                    {
-                        staticObjects.Add(biota);
-                    }
-                    
+                    // Filter in database query for better performance
+                    var staticObjects = query.Where(b => b.BiotaPropertiesPosition.Any(x => x.VariationId == variationId)).ToList();
+                    return staticObjects;
+                }
+                else
+                {
+                    return query.ToList();
                 }
             }
-
-            return staticObjects;
         }
 
         public List<Biota> GetDynamicObjectsByLandblock(ushort landblockId, int? variationId)
         {
-            var dynamics = new List<Biota>();
-
             var min = (uint)(landblockId << 16);
             var max = min | 0xFFFF;
 
@@ -577,28 +938,48 @@ namespace ACE.Database
             {
                 context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
-                var results = context.BiotaPropertiesPosition
+                var ids = context.BiotaPropertiesPosition
                     .Where(p => p.PositionType == 1 && p.ObjCellId >= min && p.ObjCellId <= max && p.ObjectId >= 0x80000000 && p.VariationId == variationId)
                     .Select(r => r.ObjectId)
                     .ToList();
 
-                foreach (var result in results)
-                {
-                    var biota = GetBiota(result);
+                // Use single batch query with eager loading and filter in database
+                var dynamics = context.Biota
+                    .Include(b => b.BiotaPropertiesAnimPart)
+                    .Include(b => b.BiotaPropertiesAttribute)
+                    .Include(b => b.BiotaPropertiesAttribute2nd)
+                    .Include(b => b.BiotaPropertiesBodyPart)
+                    .Include(b => b.BiotaPropertiesBook)
+                    .Include(b => b.BiotaPropertiesBookPageData)
+                    .Include(b => b.BiotaPropertiesBool)
+                    .Include(b => b.BiotaPropertiesCreateList)
+                    .Include(b => b.BiotaPropertiesDID)
+                    .Include(b => b.BiotaPropertiesEmote)
+                        .ThenInclude(e => e.BiotaPropertiesEmoteAction)
+                    .Include(b => b.BiotaPropertiesEnchantmentRegistry)
+                    .Include(b => b.BiotaPropertiesEventFilter)
+                    .Include(b => b.BiotaPropertiesFloat)
+                    .Include(b => b.BiotaPropertiesGenerator)
+                    .Include(b => b.BiotaPropertiesIID)
+                    .Include(b => b.BiotaPropertiesInt)
+                    .Include(b => b.BiotaPropertiesInt64)
+                    .Include(b => b.BiotaPropertiesPalette)
+                    .Include(b => b.BiotaPropertiesPosition)
+                    .Include(b => b.BiotaPropertiesSkill)
+                    .Include(b => b.BiotaPropertiesSpellBook)
+                    .Include(b => b.BiotaPropertiesString)
+                    .Include(b => b.BiotaPropertiesTextureMap)
+                    .Include(b => b.HousePermission)
+                    .Include(b => b.BiotaPropertiesAllegiance)
+                    .AsSplitQuery()
+                    .Where(b => ids.Contains(b.Id))
+                    // Filter out contained and wielded objects in database query
+                    .Where(b => !b.BiotaPropertiesIID.Any(iid => iid.Type == 2 && iid.Value != 0))
+                    .Where(b => !b.BiotaPropertiesIID.Any(iid => iid.Type == 3 && iid.Value != 0))
+                    .ToList();
 
-                    // Filter out objects that are in a container
-                    if (biota.BiotaPropertiesIID.FirstOrDefault(r => r.Type == 2 && r.Value != 0) != null)
-                        continue;
-
-                    // Filter out wielded objects
-                    if (biota.BiotaPropertiesIID.FirstOrDefault(r => r.Type == 3 && r.Value != 0) != null)
-                        continue;
-
-                    dynamics.Add(biota);
-                }
+                return dynamics;
             }
-
-            return dynamics;
         }
 
         public List<Biota> GetHousesOwned()
@@ -676,9 +1057,27 @@ namespace ACE.Database
             IQueryable<Character> query;
 
             if (accountID > 0)
-                query = context.Character.Where(r => r.AccountId == accountID && (includeDeleted || !r.IsDeleted));
+                query = context.Character
+                    .Include(r => r.CharacterPropertiesContractRegistry)
+                    .Include(r => r.CharacterPropertiesFillCompBook)
+                    .Include(r => r.CharacterPropertiesFriendList)
+                    .Include(r => r.CharacterPropertiesQuestRegistry)
+                    .Include(r => r.CharacterPropertiesShortcutBar)
+                    .Include(r => r.CharacterPropertiesSpellBar)
+                    .Include(r => r.CharacterPropertiesSquelch)
+                    .Include(r => r.CharacterPropertiesTitleBook)
+                    .Where(r => r.AccountId == accountID && (includeDeleted || !r.IsDeleted));
             else
-                query = context.Character.Where(r => r.Id == characterID && (includeDeleted || !r.IsDeleted));
+                query = context.Character
+                    .Include(r => r.CharacterPropertiesContractRegistry)
+                    .Include(r => r.CharacterPropertiesFillCompBook)
+                    .Include(r => r.CharacterPropertiesFriendList)
+                    .Include(r => r.CharacterPropertiesQuestRegistry)
+                    .Include(r => r.CharacterPropertiesShortcutBar)
+                    .Include(r => r.CharacterPropertiesSpellBar)
+                    .Include(r => r.CharacterPropertiesSquelch)
+                    .Include(r => r.CharacterPropertiesTitleBook)
+                    .Where(r => r.Id == characterID && (includeDeleted || !r.IsDeleted));
 
             var results = query.ToList();
 
@@ -691,16 +1090,7 @@ namespace ACE.Database
                     results[i] = existingChar.Key;
                 else
                 {
-                    // No reference, pull all the properties and add it to the cache
-                    query.Include(r => r.CharacterPropertiesContractRegistry).Load();
-                    query.Include(r => r.CharacterPropertiesFillCompBook).Load();
-                    query.Include(r => r.CharacterPropertiesFriendList).Load();
-                    query.Include(r => r.CharacterPropertiesQuestRegistry).Load();
-                    query.Include(r => r.CharacterPropertiesShortcutBar).Load();
-                    query.Include(r => r.CharacterPropertiesSpellBar).Load();
-                    query.Include(r => r.CharacterPropertiesSquelch).Load();
-                    query.Include(r => r.CharacterPropertiesTitleBook).Load();
-
+                    // Add character with its context to tracking
                     CharacterContexts.Add(results[i], context);
                 }
             }

@@ -43,7 +43,7 @@ namespace ACE.Server.WorldObjects
             }
 
             // ensure ammo visibility for players
-            actionChain.AddAction(this, () =>
+            actionChain.AddAction(this, ActionType.CreatureMissile_EnsureAmmoVisible, () =>
             {
                 if (CombatMode != CombatMode.Missile)
                     return;
@@ -52,7 +52,7 @@ namespace ACE.Server.WorldObjects
 
                 var delayChain = new ActionChain();
                 delayChain.AddDelaySeconds(0.001f);     // ensuring this message gets sent after player broadcasts above...
-                delayChain.AddAction(this, () =>
+                delayChain.AddAction(this, ActionType.CreatureMissile_EnqueueBroadcast, () =>
                 {
                     EnqueueBroadcast(new GameMessageParentEvent(this, ammo, ACE.Entity.Enum.ParentLocation.RightHand, ACE.Entity.Enum.Placement.RightHandCombat));
                 });
@@ -249,7 +249,7 @@ namespace ACE.Server.WorldObjects
 
             if (this is Player player && player.GetCharacterOption(CharacterOption.UseFastMissiles))
             {
-                maxVelocity *= PropertyManager.GetDouble("fast_missile_modifier").Item;
+                maxVelocity *= PropertyManager.GetDouble("fast_missile_modifier");
             }
 
             // hard cap in physics engine
@@ -349,7 +349,7 @@ namespace ACE.Server.WorldObjects
                 else
                 {
                     // use movement quartic solver
-                    if (!PropertyManager.GetBool("trajectory_alt_solver").Item)
+                    if (!PropertyManager.GetBool("trajectory_alt_solver"))
                     {
                         var numSolutions = Trajectory.solve_ballistic_arc(origin, speed, dest, targetVelocity, gravity, out s0, out _, out time);
 
@@ -362,7 +362,7 @@ namespace ACE.Server.WorldObjects
             }
 
             // use stationary solver
-            if (!PropertyManager.GetBool("trajectory_alt_solver").Item)
+            if (!PropertyManager.GetBool("trajectory_alt_solver"))
             {
                 Trajectory.solve_ballistic_arc(origin, speed, dest, gravity, out s0, out _, out t0, out _);
 

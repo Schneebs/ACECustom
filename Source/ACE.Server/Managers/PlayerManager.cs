@@ -52,10 +52,17 @@ namespace ACE.Server.Managers
 
             Parallel.ForEach(results, result =>
             {
-                var offlinePlayer = new OfflinePlayer(result);
+                try
+                {
+                    var offlinePlayer = new OfflinePlayer(result);
 
-                lock (offlinePlayers)
-                    offlinePlayers[offlinePlayer.Guid.Full] = offlinePlayer;
+                    lock (offlinePlayers)
+                        offlinePlayers[offlinePlayer.Guid.Full] = offlinePlayer;
+                }
+                catch (Exception ex)
+                {
+                    log.Error($"[PLAYERMANAGER] Failed to initialize OfflinePlayer for Biota.Id={result.Id}: {ex}");
+                }
             });
         }
 
@@ -383,20 +390,15 @@ namespace ACE.Server.Managers
 
         public static List<OfflinePlayer> GetAllOffline()
         {
-            var results = new List<OfflinePlayer>();
-
             playersLock.EnterReadLock();
             try
             {
-                foreach (var player in offlinePlayers.Values)
-                    results.Add(player);
+                return new List<OfflinePlayer>(offlinePlayers.Values);
             }
             finally
             {
                 playersLock.ExitReadLock();
             }
-
-            return results;
         }
 
         public static int GetOnlineCount()
@@ -464,20 +466,15 @@ namespace ACE.Server.Managers
 
         public static List<Player> GetAllOnline()
         {
-            var results = new List<Player>();
-
             playersLock.EnterReadLock();
             try
             {
-                foreach (var player in onlinePlayers.Values)
-                    results.Add(player);
+                return new List<Player>(onlinePlayers.Values);
             }
             finally
             {
                 playersLock.ExitReadLock();
             }
-
-            return results;
         }
 
 
@@ -531,6 +528,10 @@ namespace ACE.Server.Managers
 
                 offlinePlayer.Allegiance = player.Allegiance;
                 offlinePlayer.AllegianceNode = player.AllegianceNode;
+                
+                // Transfer save state to offline player for login blocking
+                offlinePlayer.SaveInProgress = player.SaveInProgress;
+                offlinePlayer.LastRequestedDatabaseSave = player.LastRequestedDatabaseSave;
 
                 if (!offlinePlayers.TryAdd(offlinePlayer.Guid.Full, offlinePlayer))
                     return false;
@@ -742,7 +743,7 @@ namespace ACE.Server.Managers
             }
                 
 
-            //if (PropertyManager.GetBool("log_audit", true).Item)
+            //if (PropertyManager.GetBool("log_audit", true))
                 //log.Info($"[AUDIT] {(issuer != null ? $"{issuer.Name} says on the Audit channel: " : "")}{message}");
 
             //LogBroadcastChat(Channel.Audit, issuer, message);
@@ -752,10 +753,14 @@ namespace ACE.Server.Managers
         {
             if ((sender.ChannelsActive.HasValue && sender.ChannelsActive.Value.HasFlag(channel)) || ignoreActive)
             {
-                foreach (var player in GetAllOnline().Where(p => (p.ChannelsActive ?? 0).HasFlag(channel)))
+                var onlinePlayers = GetAllOnline();
+                foreach (var player in onlinePlayers)
                 {
-                    if (!player.SquelchManager.Squelches.Contains(sender) || ignoreSquelch)
-                        player.Session.Network.EnqueueSend(new GameEventChannelBroadcast(player.Session, channel, sender.Guid == player.Guid ? "" : sender.Name, message));
+                    if ((player.ChannelsActive ?? 0).HasFlag(channel))
+                    {
+                        if (!player.SquelchManager.Squelches.Contains(sender) || ignoreSquelch)
+                            player.Session.Network.EnqueueSend(new GameEventChannelBroadcast(player.Session, channel, sender.Guid == player.Guid ? "" : sender.Name, message));
+                    }
                 }
 
                 LogBroadcastChat(channel, sender, message);
@@ -767,58 +772,58 @@ namespace ACE.Server.Managers
             switch (channel)
             {
                 case Channel.Abuse:
-                    if (!PropertyManager.GetBool("chat_log_abuse").Item)
+                    if (!PropertyManager.GetBool("chat_log_abuse"))
                         return;
                     break;
                 case Channel.Admin:
-                    if (!PropertyManager.GetBool("chat_log_admin").Item)
+                    if (!PropertyManager.GetBool("chat_log_admin"))
                         return;
                     break;
                 case Channel.AllBroadcast: // using this to sub in for a WorldBroadcast channel which isn't technically a channel
-                    if (!PropertyManager.GetBool("chat_log_global").Item)
+                    if (!PropertyManager.GetBool("chat_log_global"))
                         return;
                     break;
                 case Channel.Audit:
-                    if (!PropertyManager.GetBool("chat_log_audit").Item)
+                    if (!PropertyManager.GetBool("chat_log_audit"))
                         return;
                     break;
                 case Channel.Advocate1:
                 case Channel.Advocate2:
                 case Channel.Advocate3:
-                    if (!PropertyManager.GetBool("chat_log_advocate").Item)
+                    if (!PropertyManager.GetBool("chat_log_advocate"))
                         return;
                     break;
                 case Channel.Debug:
-                    if (!PropertyManager.GetBool("chat_log_debug").Item)
+                    if (!PropertyManager.GetBool("chat_log_debug"))
                         return;
                     break;
                 case Channel.Fellow:
                 case Channel.FellowBroadcast:
-                    if (!PropertyManager.GetBool("chat_log_fellow").Item)
+                    if (!PropertyManager.GetBool("chat_log_fellow"))
                         return;
                     break;
                 case Channel.Help:
-                    if (!PropertyManager.GetBool("chat_log_help").Item)
+                    if (!PropertyManager.GetBool("chat_log_help"))
                         return;
                     break;
                 case Channel.Olthoi:
-                    if (!PropertyManager.GetBool("chat_log_olthoi").Item)
+                    if (!PropertyManager.GetBool("chat_log_olthoi"))
                         return;
                     break;
                 case Channel.QA1:
                 case Channel.QA2:
-                    if (!PropertyManager.GetBool("chat_log_qa").Item)
+                    if (!PropertyManager.GetBool("chat_log_qa"))
                         return;
                     break;
                 case Channel.Sentinel:
-                    if (!PropertyManager.GetBool("chat_log_sentinel").Item)
+                    if (!PropertyManager.GetBool("chat_log_sentinel"))
                         return;
                     break;
 
                 case Channel.SocietyCelHanBroadcast:
                 case Channel.SocietyEldWebBroadcast:
                 case Channel.SocietyRadBloBroadcast:
-                    if (!PropertyManager.GetBool("chat_log_society").Item)
+                    if (!PropertyManager.GetBool("chat_log_society"))
                         return;
                     break;
 
@@ -827,7 +832,7 @@ namespace ACE.Server.Managers
                 case Channel.Monarch:
                 case Channel.Patron:
                 case Channel.Vassals:
-                    if (!PropertyManager.GetBool("chat_log_allegiance").Item)
+                    if (!PropertyManager.GetBool("chat_log_allegiance"))
                         return;
                     break;
 
@@ -840,7 +845,7 @@ namespace ACE.Server.Managers
                 case Channel.Shoushi:
                 case Channel.Yanshi:
                 case Channel.Yaraq:
-                    if (!PropertyManager.GetBool("chat_log_townchans").Item)
+                    if (!PropertyManager.GetBool("chat_log_townchans"))
                         return;
                     break;
 
@@ -856,16 +861,24 @@ namespace ACE.Server.Managers
 
         public static void BroadcastToChannelFromConsole(Channel channel, string message)
         {
-            foreach (var player in GetAllOnline().Where(p => (p.ChannelsActive ?? 0).HasFlag(channel)))
-                player.Session.Network.EnqueueSend(new GameEventChannelBroadcast(player.Session, channel, "CONSOLE", message));
+            var onlinePlayers = GetAllOnline();
+            foreach (var player in onlinePlayers)
+            {
+                if ((player.ChannelsActive ?? 0).HasFlag(channel))
+                    player.Session.Network.EnqueueSend(new GameEventChannelBroadcast(player.Session, channel, "CONSOLE", message));
+            }
 
             LogBroadcastChat(channel, null, message);
         }
 
         public static void BroadcastToChannelFromEmote(Channel channel, string message)
         {
-            foreach (var player in GetAllOnline().Where(p => (p.ChannelsActive ?? 0).HasFlag(channel)))
-                player.Session.Network.EnqueueSend(new GameEventChannelBroadcast(player.Session, channel, "EMOTE", message));
+            var onlinePlayers = GetAllOnline();
+            foreach (var player in onlinePlayers)
+            {
+                if ((player.ChannelsActive ?? 0).HasFlag(channel))
+                    player.Session.Network.EnqueueSend(new GameEventChannelBroadcast(player.Session, channel, "EMOTE", message));
+            }
         }
 
         public static bool GagPlayer(Player issuer, string playerName)
@@ -926,7 +939,7 @@ namespace ACE.Server.Managers
                             player.SetProperty(PropertyFloat.MinimumTimeSincePk, 0);
                         }
 
-                        var msg = $"This world has been changed to a Player Killer world. All players will become Player Killers in {PropertyManager.GetDouble("pk_respite_timer").Item} seconds.";
+                        var msg = $"This world has been changed to a Player Killer world. All players will become Player Killers in {PropertyManager.GetDouble("pk_respite_timer")} seconds.";
                         BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast));
                         LogBroadcastChat(Channel.AllBroadcast, null, msg);
                     }
@@ -947,7 +960,7 @@ namespace ACE.Server.Managers
                     }
                     break;
                 case "pkl_server":
-                    if (PropertyManager.GetBool("pk_server").Item)
+                    if (PropertyManager.GetBool("pk_server"))
                         return;
                     if (enabled)
                     {
@@ -960,7 +973,7 @@ namespace ACE.Server.Managers
                             player.SetProperty(PropertyFloat.MinimumTimeSincePk, 0);
                         }
 
-                        var msg = $"This world has been changed to a Player Killer Lite world. All players will become Player Killer Lites in {PropertyManager.GetDouble("pk_respite_timer").Item} seconds.";
+                        var msg = $"This world has been changed to a Player Killer Lite world. All players will become Player Killer Lites in {PropertyManager.GetDouble("pk_respite_timer")} seconds.";
                         BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast));
                         LogBroadcastChat(Channel.AllBroadcast, null, msg);
                     }
@@ -985,7 +998,7 @@ namespace ACE.Server.Managers
 
         public static bool IsAccountAtMaxCharacterSlots(string accountName)
         {
-            var slotsAvailable = (int)PropertyManager.GetLong("max_chars_per_account").Item;
+            var slotsAvailable = (int)PropertyManager.GetLong("max_chars_per_account");
             var onlinePlayersTotal = 0;
             var offlinePlayersTotal = 0;
 

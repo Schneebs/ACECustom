@@ -613,6 +613,160 @@ namespace ACE.Server.Command.Handlers
             session.Network.EnqueueSend(new GameMessageSystemChat("/bankaudit bankban list - Show all bank command blacklisted players/accounts", ChatMessageType.System));
         }
 
+        /// <summary>
+        /// Grants free attribute ranks (adjusts StartingValue) without affecting XP.
+        /// </summary>
+        /// <remarks>
+        /// Used for testing purposes only.
+        /// </remarks>
+        /// <example>
+        /// /grantattr str 2
+        /// </example>
+        [CommandHandler("grantattr", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 1,
+            "Grants innate attribute ranks to current character without XP cost.",
+            "Usage: /grantattr <attr> [amount]")]
+        public static void HandleGrantAttribute(Session session, params string[] parameters)
+        {
+            if (session.Player == null)
+                return;
+
+            uint amount = 1;
+            if (parameters.Length > 1 && (!uint.TryParse(parameters[1], out amount) || amount == 0))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("[GRANTATTR] Amount must be a positive whole number.", ChatMessageType.System));
+                return;
+            }
+
+            if (!TryParseAttribute(parameters[0], out var isSecondary, out var attribute, out var secondaryAttribute, out var attrName))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("[GRANTATTR] Invalid attribute abbreviation.", ChatMessageType.System));
+                return;
+            }
+
+            bool success = isSecondary
+                ? session.Player.GrantFreeVitalRanks(secondaryAttribute, amount)
+                : session.Player.GrantFreeAttributeRanks(attribute, amount);
+
+            if (success)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[GRANTATTR] Granted {amount} free ranks of {attrName}.", ChatMessageType.Advancement));
+            }
+            else
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[GRANTATTR] Failed to grant {attrName}.", ChatMessageType.System));
+            }
+        }
+
+        /// <summary>
+        /// Removes innate attribute ranks granted via GrantFreeAttributeRanks.
+        /// </summary>
+        /// <example>
+        /// /revokeattr str 1
+        /// </example>
+        [CommandHandler("revokeattr", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 1,
+            "Removes innate attribute ranks from the current character.",
+            "Usage: /revokeattr <attr> [amount]")]
+        public static void HandleRevokeAttribute(Session session, params string[] parameters)
+        {
+            if (session.Player == null)
+                return;
+
+            uint amount = 1;
+            if (parameters.Length > 1 && (!uint.TryParse(parameters[1], out amount) || amount == 0))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("[REVOKEATTR] Amount must be a positive whole number.", ChatMessageType.System));
+                return;
+            }
+
+            if (!TryParseAttribute(parameters[0], out var isSecondary, out var attribute, out var secondaryAttribute, out var attrName))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("[REVOKEATTR] Invalid attribute abbreviation.", ChatMessageType.System));
+                return;
+            }
+
+            bool success = isSecondary
+                ? session.Player.RevokeFreeVitalRanks(secondaryAttribute, amount)
+                : session.Player.RevokeFreeAttributeRanks(attribute, amount);
+
+            if (success)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[REVOKEATTR] Removed {amount} innate ranks from {attrName}.", ChatMessageType.Advancement));
+            }
+            else
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"[REVOKEATTR] Unable to remove ranks from {attrName}.", ChatMessageType.System));
+            }
+        }
+
+        /// <summary>
+        /// Maps user-facing attr tokens (str, end, etc.) to PropertyAttribute.
+        /// </summary>
+        private static bool TryParseAttribute(string token, out bool isSecondary, out PropertyAttribute attribute, out PropertyAttribute2nd secondaryAttribute, out string attrName)
+        {
+            attrName = null;
+            attribute = PropertyAttribute.Undef;
+            secondaryAttribute = PropertyAttribute2nd.Undef;
+            isSecondary = false;
+
+            switch (token.ToLowerInvariant())
+            {
+                case "str":
+                case "strength":
+                    attribute = PropertyAttribute.Strength;
+                    attrName = "Strength";
+                    return true;
+                case "end":
+                case "endurance":
+                    attribute = PropertyAttribute.Endurance;
+                    attrName = "Endurance";
+                    return true;
+                case "coo":
+                case "coordination":
+                    attribute = PropertyAttribute.Coordination;
+                    attrName = "Coordination";
+                    return true;
+                case "qui":
+                case "quickness":
+                    attribute = PropertyAttribute.Quickness;
+                    attrName = "Quickness";
+                    return true;
+                case "foc":
+                case "focus":
+                    attribute = PropertyAttribute.Focus;
+                    attrName = "Focus";
+                    return true;
+                case "sel":
+                case "self":
+                    attribute = PropertyAttribute.Self;
+                    attrName = "Self";
+                    return true;
+                case "hea":
+                case "health":
+                case "vit":
+                case "vitality":
+                case "maxhealth":
+                    isSecondary = true;
+                    secondaryAttribute = PropertyAttribute2nd.MaxHealth;
+                    attrName = "Health";
+                    return true;
+                case "sta":
+                case "stam":
+                case "stamina":
+                    isSecondary = true;
+                    secondaryAttribute = PropertyAttribute2nd.MaxStamina;
+                    attrName = "Stamina";
+                    return true;
+                case "man":
+                case "mana":
+                    isSecondary = true;
+                    secondaryAttribute = PropertyAttribute2nd.MaxMana;
+                    attrName = "Mana";
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         private static void HandleTransferSummaries(Session session, string[] parameters)
         {
             if (parameters.Length < 1)
@@ -2155,7 +2309,7 @@ namespace ACE.Server.Command.Handlers
                         if (wo is Player) // I don't recall if @smite all would kill players in range, assuming it didn't
                             continue;
 
-                        var useTakeDamage = PropertyManager.GetBool("smite_uses_takedamage").Item;
+                        var useTakeDamage = PropertyManager.GetBool("smite_uses_takedamage");
 
                         if (wo is Creature creature && creature.Attackable)
                             creature.Smite(session.Player, useTakeDamage);
@@ -2189,7 +2343,7 @@ namespace ACE.Server.Command.Handlers
                     // playerSession will be null when the character is not found
                     if (player != null)
                     {
-                        player.Smite(session.Player, PropertyManager.GetBool("smite_uses_takedamage").Item);
+                        player.Smite(session.Player, PropertyManager.GetBool("smite_uses_takedamage"));
 
                         PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} used smite on {player.Name}");
                         return;
@@ -2211,7 +2365,7 @@ namespace ACE.Server.Command.Handlers
 
                     if (wo != null)
                     {
-                        wo.Smite(session.Player, PropertyManager.GetBool("smite_uses_takedamage").Item);
+                        wo.Smite(session.Player, PropertyManager.GetBool("smite_uses_takedamage"));
 
                         PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} used smite on {wo.Name} (0x{wo.Guid:X8})");
                     }
@@ -2844,7 +2998,7 @@ namespace ACE.Server.Command.Handlers
                                 {
                                     var updateHouseChain = new ActionChain();
                                     updateHouseChain.AddDelaySeconds(5.0f);
-                                    updateHouseChain.AddAction(onlinePlayer, onlinePlayer.HandleActionQueryHouse);
+                                    updateHouseChain.AddAction(onlinePlayer, ActionType.AdminCommands_HandleActionQueryHouse, onlinePlayer.HandleActionQueryHouse);
                                     updateHouseChain.EnqueueChain();
                                 }
                             }
@@ -2885,7 +3039,7 @@ namespace ACE.Server.Command.Handlers
                                 {
                                     var updateHouseChain = new ActionChain();
                                     updateHouseChain.AddDelaySeconds(5.0f);
-                                    updateHouseChain.AddAction(onlinePlayer, onlinePlayer.HandleActionQueryHouse);
+                                    updateHouseChain.AddAction(onlinePlayer, ActionType.AdminCommands_HandleActionQueryHouse, onlinePlayer.HandleActionQueryHouse);
                                     updateHouseChain.EnqueueChain();
                                 }
                             }
@@ -3332,7 +3486,7 @@ namespace ACE.Server.Command.Handlers
                 DoCopyChar(session, existingCharName, existingPlayer.Guid.Full, false, newCharName, account.AccountId);
                 return;
             }
-            else if ( session.Characters.Count >= PropertyManager.GetLong("max_chars_per_account").Item)
+            else if ( session.Characters.Count >= PropertyManager.GetLong("max_chars_per_account"))
             {
                 CommandHandlerHelper.WriteOutputInfo(session, $"Failed to copy the character \"{existingCharName}\" to a new character \"{newCharName}\" for the account \"{session.Account}\"! Account is out of free character slots.", ChatMessageType.Broadcast);
                 return;
@@ -4412,6 +4566,425 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"You cannot force {wo.Name} to drop everything because it is not a player.", ChatMessageType.Broadcast));
             }
         }
+
+        // debugsummon
+        [CommandHandler("debugsummon", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 0,
+            "Shows augmentation breakdown for selected CombatPet",
+            "Displays base values from weenie and augmentation bonuses for the selected summon.\n"
+            + "Shows: Attributes, Skills, Weapon Stats, and Life Resistances.")]
+        public static void HandleDebugSummon(Session session, params string[] parameters)
+        {
+            var combatPet = CommandHandlerHelper.GetLastAppraisedObject(session) as CombatPet;
+
+            if (combatPet == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, "You must select a CombatPet (summon) to use this command.");
+                return;
+            }
+
+            // Get original weenie data
+            var weenie = DatabaseManager.World.GetCachedWeenie(combatPet.WeenieClassId);
+            if (weenie == null)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, $"Could not find weenie data for {combatPet.WeenieClassId}.");
+                return;
+            }
+
+            var output = new System.Text.StringBuilder();
+            // Clean pet name for display (remove special characters that might render incorrectly)
+            var petName = combatPet.Name?.Replace("+", "").Trim() ?? "Unknown";
+            output.AppendLine($"=== Augmentation Breakdown for {petName} ===");
+            output.AppendLine($"Weenie Class ID: {combatPet.WeenieClassId}");
+            output.AppendLine();
+
+            // Get augmentation values directly from the pet's stored state (not from owner)
+            // Get summon aug count directly from pet (stored at Init)
+            var summonAugCount = (int)(combatPet.LuminanceAugmentSummonCount ?? 0);
+            
+            // Get item augmentation values directly from pet (stored at Init)
+            var itemAugAttackMod = combatPet.ItemAugAttackMod;
+            var itemAugDefenseMod = combatPet.ItemAugDefenseMod;
+            var itemAugDamageBonus = combatPet.ItemAugDamageBonus;
+            var itemAugArmorBonus = combatPet.ItemAugArmorBonus;
+            
+            // Get life augmentation protection rating directly from pet (stored at Init)
+            var lifeAugProtectionRating = combatPet.LifeAugProtectionRating;
+
+            // Attributes
+            output.AppendLine("=== ATTRIBUTES ===");
+            var allAttributes = new[]
+            {
+                PropertyAttribute.Strength,
+                PropertyAttribute.Endurance,
+                PropertyAttribute.Coordination,
+                PropertyAttribute.Quickness,
+                PropertyAttribute.Focus,
+                PropertyAttribute.Self
+            };
+
+            foreach (var attr in allAttributes)
+            {
+                uint weenieBase = 0;
+                if (weenie.PropertiesAttribute != null && weenie.PropertiesAttribute.TryGetValue(attr, out var weenieAttr))
+                    weenieBase = weenieAttr.InitLevel;
+
+                var currentBase = combatPet.Attributes[attr].StartingValue;
+                var currentTotal = combatPet.Attributes[attr].Base;
+                var augBonus = currentBase - weenieBase;
+
+                output.AppendLine($"{attr}: Base {weenieBase} + Aug {augBonus} = Total {currentTotal} (Current: {combatPet.Attributes[attr].Current})");
+            }
+            output.AppendLine();
+
+            // Skills
+            output.AppendLine("=== SKILLS ===");
+            if (weenie.PropertiesSkill != null)
+            {
+                foreach (var weenieSkill in weenie.PropertiesSkill)
+                {
+                    var skill = weenieSkill.Key;
+                    var weenieInitLevel = weenieSkill.Value.InitLevel;
+
+                    var creatureSkill = combatPet.GetCreatureSkill(skill);
+                    if (creatureSkill != null)
+                    {
+                        var currentInitLevel = creatureSkill.InitLevel;
+                        var augBonus = currentInitLevel - weenieInitLevel;
+                        var currentBase = creatureSkill.Base;
+                        var currentTotal = creatureSkill.Current;
+
+                        output.AppendLine($"{skill}: Base {weenieInitLevel} + Aug {augBonus} = InitLevel {currentInitLevel} | Base Total: {currentBase} | Current Total: {currentTotal}");
+                    }
+                }
+            }
+            output.AppendLine();
+
+            // Weapon Stats or Body Part Stats
+            var weapon = combatPet.GetEquippedMeleeWeapon();
+            if (weapon != null)
+            {
+                output.AppendLine("=== WEAPON STATS ===");
+                var weaponAttackMod = combatPet.ItemAugAttackMod;
+                var weaponDefenseMod = combatPet.ItemAugDefenseMod;
+                var weaponDamageBonus = combatPet.ItemAugDamageBonus;
+
+                // Item augs have a base of 0.20, then scaling
+                var attackBase = 0.20f;
+                var attackAug = weaponAttackMod - attackBase;
+                var defenseBase = 0.20f;
+                var defenseAug = weaponDefenseMod - defenseBase;
+                
+                // Damage bonus: base is 20, then scaling
+                var damageBase = 20;
+                var damageAug = weaponDamageBonus - damageBase;
+                // itemAugDamageBonus already declared at method scope
+
+                // Get pet's melee, missile augmentation bonuses (only melee/missile apply to physical damage)
+                var meleeAugBonus = (long)(combatPet.LuminanceAugmentMeleeCount ?? 0);
+                var missileAugBonus = (long)(combatPet.LuminanceAugmentMissileCount ?? 0);
+                
+                // Determine which aug applies based on combat type (default to melee for weapons)
+                var currentCombatType = combatPet.CurrentAttack ?? CombatType.Melee;
+                var applicableAugBonus = currentCombatType == CombatType.Missile ? missileAugBonus : meleeAugBonus;
+                var totalDamageBonus = itemAugDamageBonus + applicableAugBonus;
+
+                output.AppendLine($"Attack Mod: Base {attackBase:F2} + Aug {attackAug:F2} = Total {weaponAttackMod:F2}");
+                output.AppendLine($"Defense Mod: Base {defenseBase:F2} + Aug {defenseAug:F2} = Total {weaponDefenseMod:F2}");
+                output.AppendLine($"Damage Bonus - Item Aug: Base {damageBase} + Aug {damageAug} = Total {itemAugDamageBonus}");
+                if (applicableAugBonus > 0)
+                {
+                    output.AppendLine($"Damage Bonus - Pet Aug ({currentCombatType}): +{applicableAugBonus}");
+                }
+                output.AppendLine($"Damage Bonus - Total: {totalDamageBonus}");
+                output.AppendLine();
+            }
+            else
+            {
+                // Body Part Stats (no weapon)
+                output.AppendLine("=== BODY PART STATS (No Weapon) ===");
+                var weaponAttackMod = combatPet.ItemAugAttackMod;
+                var weaponDefenseMod = combatPet.ItemAugDefenseMod;
+                var weaponDamageBonus = combatPet.ItemAugDamageBonus;
+
+                // Only show item aug breakdown if item augs are present
+                if (weaponAttackMod > 0 || weaponDefenseMod > 0)
+                {
+                    // Item augs have a base of 0.20, then scaling
+                    var attackBase = 0.20f;
+                    var attackAug = weaponAttackMod - attackBase;
+                    var defenseBase = 0.20f;
+                    var defenseAug = weaponDefenseMod - defenseBase;
+
+                    output.AppendLine($"Attack Mod: Base {attackBase:F2} + Aug {attackAug:F2} = Total {weaponAttackMod:F2}");
+                    output.AppendLine($"Defense Mod: Base {defenseBase:F2} + Aug {defenseAug:F2} = Total {weaponDefenseMod:F2}");
+                }
+                else
+                {
+                    output.AppendLine($"Attack Mod: {weaponAttackMod:F2} (No Item Augs)");
+                    output.AppendLine($"Defense Mod: {weaponDefenseMod:F2} (No Item Augs)");
+                }
+                
+                // Get pet's melee, missile augmentation bonuses (only melee/missile apply to physical damage)
+                var meleeAugBonus = (long)(combatPet.LuminanceAugmentMeleeCount ?? 0);
+                var missileAugBonus = (long)(combatPet.LuminanceAugmentMissileCount ?? 0);
+                
+                // Determine which aug applies based on combat type (default to melee for body parts)
+                var currentCombatType = combatPet.CurrentAttack ?? CombatType.Melee;
+                var applicableAugBonus = currentCombatType == CombatType.Missile ? missileAugBonus : meleeAugBonus;
+                
+                if (applicableAugBonus > 0)
+                {
+                    output.AppendLine($"Pet Aug ({currentCombatType}): +{applicableAugBonus}");
+                }
+                output.AppendLine();
+
+                // Show body parts with damage > 0
+                if (weenie.PropertiesBodyPart != null && combatPet.Biota.PropertiesBodyPart != null)
+                {
+                    var bodyPartsWithDamage = new List<(CombatBodyPart part, PropertiesBodyPart weeniePart, PropertiesBodyPart biotaPart)>();
+                    
+                    foreach (var weenieBodyPart in weenie.PropertiesBodyPart)
+                    {
+                        if (weenieBodyPart.Value.DVal > 0)
+                        {
+                            combatPet.Biota.PropertiesBodyPart.TryGetValue(weenieBodyPart.Key, out var biotaBodyPart);
+                            bodyPartsWithDamage.Add((weenieBodyPart.Key, weenieBodyPart.Value, biotaBodyPart));
+                        }
+                    }
+
+                    if (bodyPartsWithDamage.Count > 0)
+                    {
+                        output.AppendLine("Body Parts (Base Damage + Base Mod + Aug = Total):");
+                        foreach (var (part, weeniePart, biotaPart) in bodyPartsWithDamage)
+                        {
+                            var weenieDVal = weeniePart.DVal;
+                            var weenieDVar = weeniePart.DVar;
+                            var weenieDType = weeniePart.DType;
+
+                            var baseDamage = weenieDVal;
+                            
+                            // Calculate total damage bonus (item augs + melee/missile augs)
+                            var totalDamageBonus = weaponDamageBonus + applicableAugBonus;
+                            var totalDamage = baseDamage + totalDamageBonus;
+
+                            // Calculate min/max damage
+                            var maxDamage = totalDamage;
+                            var minDamage = maxDamage * (1.0f - weenieDVar);
+
+                            output.AppendLine($"  {part} ({weenieDType}):");
+                            output.AppendLine($"    Base Damage: {baseDamage} (Variance: {weenieDVar:F2})");
+                            
+                            // Only show item aug breakdown if item augs are present
+                            if (weaponDamageBonus > 0)
+                            {
+                                // Item augs have a base of 20, then scaling
+                                var damageBase = 20;
+                                var damageAug = weaponDamageBonus - damageBase; // Scaling part only
+                                
+                                output.AppendLine($"    Item Aug - Base Mod: +{damageBase}");
+                                output.AppendLine($"    Item Aug - Scaling: +{damageAug}");
+                                output.AppendLine($"    Item Aug - Total: +{weaponDamageBonus}");
+                            }
+                            
+                            if (applicableAugBonus > 0)
+                            {
+                                output.AppendLine($"    Pet Aug ({currentCombatType}): +{applicableAugBonus}");
+                            }
+                            
+                            output.AppendLine($"    Total Bonus: +{totalDamageBonus}");
+                            output.AppendLine($"    Total Damage: {totalDamage} (Range: {minDamage:F1} - {maxDamage:F1})");
+                        }
+                        output.AppendLine();
+                    }
+                }
+            }
+
+            // Imbued Effects
+            output.AppendLine("=== IMBUED EFFECTS ===");
+            var weaponForImbues = combatPet.GetEquippedMeleeWeapon();
+            WorldObject targetForImbues = weaponForImbues ?? (WorldObject)combatPet;
+            
+            var imbuedEffects = RecipeManager.GetImbuedEffects(targetForImbues);
+            if (imbuedEffects != ImbuedEffectType.Undef)
+            {
+                output.AppendLine($"Applied to: {(weaponForImbues != null ? "Weapon" : "Creature (Body Parts)")}");
+                output.AppendLine("Imbued Effects:");
+                
+                var effectNames = new List<string>();
+                if (imbuedEffects.HasFlag(ImbuedEffectType.CriticalStrike))
+                    effectNames.Add("Critical Strike");
+                if (imbuedEffects.HasFlag(ImbuedEffectType.CripplingBlow))
+                    effectNames.Add("Crippling Blow");
+                if (imbuedEffects.HasFlag(ImbuedEffectType.ArmorRending))
+                    effectNames.Add("Armor Rending");
+                if (imbuedEffects.HasFlag(ImbuedEffectType.SlashRending))
+                    effectNames.Add("Slash Rending");
+                if (imbuedEffects.HasFlag(ImbuedEffectType.PierceRending))
+                    effectNames.Add("Pierce Rending");
+                if (imbuedEffects.HasFlag(ImbuedEffectType.BludgeonRending))
+                    effectNames.Add("Bludgeon Rending");
+                if (imbuedEffects.HasFlag(ImbuedEffectType.AcidRending))
+                    effectNames.Add("Acid Rending");
+                if (imbuedEffects.HasFlag(ImbuedEffectType.ColdRending))
+                    effectNames.Add("Cold Rending");
+                if (imbuedEffects.HasFlag(ImbuedEffectType.ElectricRending))
+                    effectNames.Add("Electric Rending");
+                if (imbuedEffects.HasFlag(ImbuedEffectType.FireRending))
+                    effectNames.Add("Fire Rending");
+                if (imbuedEffects.HasFlag(ImbuedEffectType.NetherRending))
+                    effectNames.Add("Nether Rending");
+                // Note: Defense imbues (Melee Defense, Missile Defense, Magic Defense) are excluded and won't appear
+                if (imbuedEffects.HasFlag(ImbuedEffectType.Spellbook))
+                    effectNames.Add("Spellbook");
+                if (imbuedEffects.HasFlag(ImbuedEffectType.IgnoreSomeMagicProjectileDamage))
+                    effectNames.Add("Ignore Some Magic Projectile Damage");
+                if (imbuedEffects.HasFlag(ImbuedEffectType.AlwaysCritical))
+                    effectNames.Add("Always Critical");
+                if (imbuedEffects.HasFlag(ImbuedEffectType.IgnoreAllArmor))
+                    effectNames.Add("Ignore All Armor");
+                
+                if (effectNames.Count > 0)
+                {
+                    foreach (var effectName in effectNames)
+                    {
+                        output.AppendLine($"  - {effectName}");
+                    }
+                }
+                else
+                {
+                    output.AppendLine("  None");
+                }
+            }
+            else
+            {
+                output.AppendLine("No imbued effects applied");
+            }
+            output.AppendLine();
+
+            // Armor
+            output.AppendLine("=== ARMOR ===");
+            // itemAugArmorBonus already declared at method scope
+            
+            // Get base armor from weenie data - average across all body parts with armor > 0
+            uint weenieBaseArmor = 0;
+            var bodyPartsWithArmor = new List<(CombatBodyPart part, uint armor)>();
+            if (weenie.PropertiesBodyPart != null)
+            {
+                foreach (var weenieBodyPart in weenie.PropertiesBodyPart)
+                {
+                    if (weenieBodyPart.Value.BaseArmor > 0)
+                    {
+                        bodyPartsWithArmor.Add((weenieBodyPart.Key, (uint)weenieBodyPart.Value.BaseArmor));
+                    }
+                }
+                
+                if (bodyPartsWithArmor.Count > 0)
+                {
+                    // Calculate average armor across all body parts
+                    var armorSum = bodyPartsWithArmor.Sum(bp => bp.armor);
+                    weenieBaseArmor = (uint)(armorSum / bodyPartsWithArmor.Count);
+                }
+            }
+            
+            var totalArmor = weenieBaseArmor + itemAugArmorBonus;
+            
+            if (bodyPartsWithArmor.Count > 0)
+            {
+                output.AppendLine($"Base Armor (Weenie - Average): {weenieBaseArmor} (from {bodyPartsWithArmor.Count} body part(s))");
+                if (bodyPartsWithArmor.Count > 1)
+                {
+                    output.AppendLine("Per-Part Base Armor:");
+                    foreach (var (part, armor) in bodyPartsWithArmor)
+                    {
+                        output.AppendLine($"  {part}: {armor}");
+                    }
+                }
+            }
+            else
+            {
+                output.AppendLine($"Base Armor (Weenie): {weenieBaseArmor}");
+            }
+            
+            if (itemAugArmorBonus > 0)
+            {
+                var armorBase = 200;
+                var armorAug = itemAugArmorBonus - armorBase;
+                output.AppendLine($"Item Aug - Base Mod: +{armorBase}");
+                output.AppendLine($"Item Aug - Scaling: +{armorAug}");
+                output.AppendLine($"Item Aug - Total: +{itemAugArmorBonus}");
+            }
+            else
+            {
+                output.AppendLine($"Item Aug - Total: +0 (No item augmentations)");
+            }
+            output.AppendLine($"Total Armor: {totalArmor}");
+            output.AppendLine();
+
+            // Life Resistances
+            output.AppendLine("=== LIFE RESISTANCES ===");
+            var allDamageTypes = new[]
+            {
+                DamageType.Slash,
+                DamageType.Pierce,
+                DamageType.Bludgeon,
+                DamageType.Cold,
+                DamageType.Fire,
+                DamageType.Acid,
+                DamageType.Electric,
+                DamageType.Nether
+            };
+
+            // Use life aug protection rating directly from pet (already retrieved above)
+
+            foreach (var damageType in allDamageTypes)
+            {
+                // Get base resistance mod (what the pet would have without life augs)
+                // This is natural resistance + existing protection mods, but no life aug
+                var naturalResistMod = combatPet.GetNaturalResistance(damageType);
+                var existingProtectionMod = combatPet.EnchantmentManager.GetProtectionResistanceMod(damageType);
+                var vulnMod = combatPet.EnchantmentManager.GetVulnerabilityResistanceMod(damageType);
+                
+                // Protection mod becomes either life protection or natural resistance, whichever is more powerful
+                var baseProtectionMod = existingProtectionMod;
+                if (baseProtectionMod > naturalResistMod)
+                    baseProtectionMod = naturalResistMod;
+                
+                // Base resistance mod (without life augs)
+                var baseResistanceMod = baseProtectionMod * vulnMod;
+                
+                // Get actual current resistance mod from the pet (includes life aug protection)
+                var currentResistanceMod = combatPet.GetResistanceMod(damageType, null, null);
+                
+                // Calculate life aug protection (how much protection is being applied)
+                // Protection reduces the resistance mod, so we show it as a positive protection value
+                var lifeAugProtection = baseResistanceMod - currentResistanceMod;
+
+                // Show breakdown: Base - Protection = Current (lower resistance mod = more protection)
+                if (lifeAugProtection > 0f)
+                {
+                    output.AppendLine($"{damageType}: Base {baseResistanceMod:F3} - Protection {lifeAugProtection:F3} = Resistance Mod {currentResistanceMod:F3}");
+                }
+                else
+                {
+                    output.AppendLine($"{damageType}: Base {baseResistanceMod:F3} = Resistance Mod {currentResistanceMod:F3} (No Life Aug Protection)");
+                }
+            }
+            output.AppendLine();
+
+            // Summary
+            output.AppendLine("=== SUMMARY ===");
+            output.AppendLine($"Summon Augmentations: {summonAugCount}");
+            output.AppendLine($"Item Augmentations - Attack Mod: {itemAugAttackMod:F4} | Defense Mod: {itemAugDefenseMod:F4} | Damage Bonus: {itemAugDamageBonus} | Armor Bonus: {itemAugArmorBonus}");
+            output.AppendLine($"Life Augmentations - Protection Rating: {lifeAugProtectionRating:F4}");
+            output.AppendLine($"Melee Augmentations: {combatPet.LuminanceAugmentMeleeCount ?? 0}");
+            output.AppendLine($"Missile Augmentations: {combatPet.LuminanceAugmentMissileCount ?? 0}");
+            output.AppendLine($"War Augmentations: {combatPet.LuminanceAugmentWarCount ?? 0}");
+            output.AppendLine($"Void Augmentations: {combatPet.LuminanceAugmentVoidCount ?? 0}");
+
+            CommandHandlerHelper.WriteOutputInfo(session, output.ToString());
+        }
+
+
 
         // god
         [CommandHandler("god", AccessLevel.Sentinel, CommandHandlerFlag.RequiresWorld, 0,
@@ -5884,15 +6457,6 @@ namespace ACE.Server.Command.Handlers
             try
             {
                 var boolVal = bool.Parse(parameters[1]);
-
-                var prevState = PropertyManager.GetBool(parameters[0]);
-
-                if (prevState.Item == boolVal && !string.IsNullOrWhiteSpace(prevState.Description))
-                {
-                    CommandHandlerHelper.WriteOutputInfo(session, $"Bool property is already {boolVal} for {parameters[0]}!");
-                    return;
-                }
-
                 if (PropertyManager.ModifyBool(parameters[0], boolVal))
                 {
                     CommandHandlerHelper.WriteOutputInfo(session, "Bool property successfully updated!");
@@ -5916,7 +6480,7 @@ namespace ACE.Server.Command.Handlers
         public static void HandleFetchServerBoolProperty(Session session, params string[] parameters)
         {
             var boolVal = PropertyManager.GetBool(parameters[0], cacheFallback: false);
-            CommandHandlerHelper.WriteOutputInfo(session, $"{parameters[0]} - {boolVal.Description ?? "No Description"}: {boolVal.Item}");
+            CommandHandlerHelper.WriteOutputInfo(session, $"{parameters[0]}: {boolVal}");
         }
 
         [CommandHandler("modifylong", AccessLevel.Admin, CommandHandlerFlag.None, 2, "Modifies a server property that is a long", "modifylong (string) (long)")]
@@ -5943,7 +6507,7 @@ namespace ACE.Server.Command.Handlers
         public static void HandleFetchServerLongProperty(Session session, params string[] parameters)
         {
             var intVal = PropertyManager.GetLong(parameters[0], cacheFallback: false);
-            CommandHandlerHelper.WriteOutputInfo(session, $"{parameters[0]} - {intVal.Description ?? "No Description"}: {intVal.Item}");
+            CommandHandlerHelper.WriteOutputInfo(session, $"{parameters[0]}: {intVal}");
         }
 
         [CommandHandler("modifydouble", AccessLevel.Admin, CommandHandlerFlag.None, 2, "Modifies a server property that is a double", "modifyfloat (string) (double)")]
@@ -5970,7 +6534,7 @@ namespace ACE.Server.Command.Handlers
         public static void HandleFetchServerFloatProperty(Session session, params string[] parameters)
         {
             var floatVal = PropertyManager.GetDouble(parameters[0], cacheFallback: false);
-            CommandHandlerHelper.WriteOutputInfo(session, $"{parameters[0]} - {floatVal.Description ?? "No Description"}: {floatVal.Item}");
+            CommandHandlerHelper.WriteOutputInfo(session, $"{parameters[0]}: {floatVal}");
         }
 
         [CommandHandler("modifystring", AccessLevel.Admin, CommandHandlerFlag.None, 2, "Modifies a server property that is a string", "modifystring (string) (string)")]
@@ -5989,7 +6553,7 @@ namespace ACE.Server.Command.Handlers
         public static void HandleFetchServerStringProperty(Session session, params string[] parameters)
         {
             var stringVal = PropertyManager.GetString(parameters[0], cacheFallback: false);
-            CommandHandlerHelper.WriteOutputInfo(session, $"{parameters[0]} - {stringVal.Description ?? "No Description"}: {stringVal.Item}");
+            CommandHandlerHelper.WriteOutputInfo(session, $"{parameters[0]}: {stringVal}");
         }
 
         [CommandHandler("modifypropertydesc", AccessLevel.Admin, CommandHandlerFlag.None, 3, "Modifies a server property's description", "modifypropertydesc <STRING|BOOL|DOUBLE|LONG> (string) (string)")]

@@ -171,6 +171,7 @@ namespace ACE.Entity.Enum.Properties
         [AssessmentProperty]
         AutowieldLeft                    = 130,
         IsMule                           = 131,
+        RandomizeSpawnTime               = 132,
 
         /* custom */
         LinkedPortalOneSummon            = 9001,
@@ -196,5 +197,13 @@ namespace ACE.Entity.Enum.Properties
         SplitArrows                      = 9030,
         IsSplitArrow                     = 9031,
         IsSplitArrowKill                 = 9032,
+        /// <summary>
+        /// If TRUE on a weapon, allows multi-strike hits to each roll a proc with decay
+        /// </summary>
+        WeaponAllowMultiStrikeProcs      = 9035,
+        /// <summary>
+        /// If TRUE on a weapon, its cast-on-strike can proc on cleaved targets
+        /// </summary>
+        WeaponProcOnCleaveTargets        = 9036,
     }
 }

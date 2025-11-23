@@ -70,14 +70,21 @@ namespace ACE.Server.Network
         /// The time at which the BeginDDD message was sent to the client. Used to determine when to start processing dddDataQueue initially.
         /// </summary>
         public DateTime BeginDDDSentTime;
+
         /// <summary>
-        /// Queue for data files missing at time of connection (Portal/Cell/Language DAT), and data files requested by client (Cell DAT)
+        /// Thread-safe lazy initializer for DDD queue and rate limiter.
+        /// Ensures single initialization even under concurrent access.
+        /// Access via GetDDDResources() property instead of direct field access.
         /// </summary>
-        private ConcurrentQueue<(uint DatFileId, DatDatabaseType DatDatabaseType)> dddDataQueue;
+        private readonly Lazy<(ConcurrentQueue<(uint, DatDatabaseType)> queue, RateLimiter rateLimiter)> dddResources;
+
         /// <summary>
-        /// The rate at which ProcessDDDQueue executes (and sends DDD patch data out to client)
+        /// Thread-safe accessor for DDD resources. Always use this instead of accessing fields directly.
         /// </summary>
-        private static readonly RateLimiter dddDataQueueRateLimiter = new RateLimiter(1000, TimeSpan.FromMinutes(1));
+        private (ConcurrentQueue<(uint, DatDatabaseType)> queue, RateLimiter rateLimiter) GetDDDResources()
+        {
+            return dddResources.Value;
+        }
 
         /// <summary>
         /// Rate limiter for /passwd command
@@ -100,12 +107,19 @@ namespace ACE.Server.Network
 
         public DateTime LastQBCommandTime { get; set; }
 
+        public DateTime LoginTime { get; set; }
+
         public Session(ConnectionListener connectionListener, IPEndPoint endPoint, ushort clientId, ushort serverId)
         {
             EndPoint = endPoint;
             Network = new NetworkSession(this, connectionListener, clientId, serverId);
+            
+            // Initialize lazy DDD resources with thread-safe creation
+            // Uses ExecutionAndPublication mode to ensure only one thread initializes
+            dddResources = new Lazy<(ConcurrentQueue<(uint, DatDatabaseType)>, RateLimiter)>(
+                () => (new ConcurrentQueue<(uint, DatDatabaseType)>(), new RateLimiter(1000, TimeSpan.FromMinutes(1))),
+                LazyThreadSafetyMode.ExecutionAndPublication);
         }
-
 
         private bool CheckState(ClientPacket packet)
         {
@@ -255,6 +269,9 @@ namespace ACE.Server.Network
         {
             if (Player == null) return;
 
+            // Log character logout to char_tracker table
+            CharacterTracker.LogCharacterLogout(Player);
+
             // Character database objects are not cached. Each session gets a new character entity and dbContext from ShardDatabase.
             // To ensure the latest version of the character is saved before any new logins pull these records again, we queue a save here if necessary, at the instant logoff is requested.
             if (Player.CharacterChangesDetected)
@@ -271,9 +288,30 @@ namespace ACE.Server.Network
 
         private void SendFinalLogOffMessages()
         {
-            // If we still exist on a landblock, we can't exit yet.
+            // If we still exist on a landblock, we can't exit yet - UNLESS we've been waiting too long
             if (Player?.CurrentLandblock != null)
-                return;
+            {
+                // During shutdown or if logout has been pending for more than 30 seconds, force the cleanup
+                if (!ServerManager.ShutdownInProgress && (DateTime.UtcNow - logOffRequestTime).TotalSeconds < 30)
+                    return;
+                
+                // Force removal from landblock if we're still stuck after 30 seconds or during shutdown
+                if (Player?.CurrentLandblock != null)
+                {
+                    log.Warn($"[LOGOUT] Player {Player.Name} (0x{Player.Guid}) stuck on landblock {Player.CurrentLandblock.Id} during logout. Force removing from landblock.");
+                    Player.CurrentLandblock.RemoveWorldObject(Player.Guid, false);
+                    
+                    // Give the removal one more chance to process
+                    if (Player?.CurrentLandblock != null)
+                    {
+                        log.Error($"[LOGOUT] Player {Player.Name} (0x{Player.Guid}) STILL stuck on landblock after force removal attempt. Clearing reference directly.");
+                        // Last resort: clear the reference directly to unblock shutdown
+                        // This isn't ideal but prevents infinite shutdown hangs
+                        if (Player != null)
+                            Player.CurrentLandblock = null;
+                    }
+                }
+            }
 
             logOffRequestTime = DateTime.MinValue;
 
@@ -350,6 +388,17 @@ namespace ACE.Server.Network
 
             NetworkManager.RemoveSession(this);
 
+            // Clean up DDD resources to prevent memory leaks
+            // Only clear if lazy was actually initialized
+            if (dddResources.IsValueCreated)
+            {
+                var resources = GetDDDResources();
+                while (resources.queue.TryDequeue(out _)) { }
+                // Note: RateLimiter will be garbage collected, no explicit cleanup needed
+            }
+            BeginDDDSent = false;
+            BeginDDDSentTime = DateTime.MinValue;
+
             // This is a temp fix to mark the Session.Network portion of the Session as released
             // What this means is that we will release any network related resources, as well as avoid taking on additional resources
             // In the future, we should set Network to null and funnel Network communication through Session, instead of accessing Session.Network directly.
@@ -371,22 +420,34 @@ namespace ACE.Server.Network
             Network.EnqueueSend(worldBroadcastMessage);
         }
 
-        /// <summary>
-        /// This will enqueue a file to be sent by ProcessDDDQueue.
-        /// </summary>
-        public bool AddToDDDQueue(uint datFileId, DatDatabaseType datDatabaseType)
-        {
-            dddDataQueue ??= new ConcurrentQueue<(uint, DatDatabaseType)>();
-            dddDataQueue.Enqueue((datFileId, datDatabaseType));
-            return true;
-        }
+    /// <summary>
+    /// This will enqueue a file to be sent by ProcessDDDQueue.
+    /// Thread-safe - can be called from any thread.
+    /// </summary>
+    public bool AddToDDDQueue(uint datFileId, DatDatabaseType datDatabaseType)
+    {
+        // Get resources through thread-safe accessor
+        // Only one initialization will occur even under concurrent access
+        var resources = GetDDDResources();
+        
+        // Enqueue directly - no need to assign to fields
+        resources.queue.Enqueue((datFileId, datDatabaseType));
+        return true;
+    }
 
         /// <summary>
         /// This will Network.EnqueueSend queued data files from DDDManager/DDDHandler.
+        /// Called from TickOutbound on the world thread.
         /// </summary>
         private void ProcessDDDQueue()
         {
-            if (dddDataQueue == null || dddDataQueueRateLimiter.GetSecondsToWaitBeforeNextEvent() > 0)
+            // Check if resources have been initialized before accessing
+            if (!dddResources.IsValueCreated)
+                return;
+
+            var resources = GetDDDResources();
+            
+            if (resources.rateLimiter.GetSecondsToWaitBeforeNextEvent() > 0)
                 return;
 
             if (BeginDDDSentTime != DateTime.MinValue && DateTime.UtcNow < BeginDDDSentTime.AddSeconds(5))
@@ -394,10 +455,10 @@ namespace ACE.Server.Network
 
             BeginDDDSentTime = DateTime.MinValue;
 
-            if (dddDataQueue.TryDequeue(out var dataFile))
+            if (resources.queue.TryDequeue(out var dataFile))
             {
-                Network.EnqueueSend(new GameMessageDDDDataMessage(dataFile.DatFileId, dataFile.DatDatabaseType));
-                dddDataQueueRateLimiter.RegisterEvent();
+                Network.EnqueueSend(new GameMessageDDDDataMessage(dataFile.Item1, dataFile.Item2));
+                resources.rateLimiter.RegisterEvent();
             }
         }
     }

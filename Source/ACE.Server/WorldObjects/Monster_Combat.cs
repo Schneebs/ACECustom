@@ -345,7 +345,7 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void TakeDamageOverTime_NotifySource(Player source, DamageType damageType, float amount, bool aetheria = false)
         {
-            if (!PropertyManager.GetBool("show_dot_messages").Item)
+            if (!PropertyManager.GetBool("show_dot_messages"))
                 return;
 
             var iAmount = (uint)Math.Round(amount);
@@ -716,11 +716,11 @@ namespace ACE.Server.WorldObjects
             if (damageObj != null)
             {
                 actionChain.AddAction(new ActionChain.ChainElement(
-                    damageObj, new ActionEventDelegate(() => damageObj.DeleteObject())
+                    damageObj, new ActionEventDelegate(ActionType.MonsterCombat_DeleteObjectAfterDelay, () => damageObj.DeleteObject())
                 ));
             }
             actionChain.AddAction(new ActionChain.ChainElement(
-                visualObj, new ActionEventDelegate(() => visualObj.DeleteObject())
+                visualObj, new ActionEventDelegate(ActionType.MonsterCombat_DeleteObjectAfterDelay, () => visualObj.DeleteObject())
             ));
             actionChain.EnqueueChain();
         }
