@@ -362,14 +362,14 @@ namespace ACE.Server.WorldObjects.Managers
                             long lifeAugs = player.LuminanceAugmentLifeCount ?? 0;
                             float vulnBonus;
                             
-                            // Check if target (monster) has vuln damage scaling enabled
-                            bool useVulnScaling = WorldObject?.GetProperty(PropertyBool.UseVulnDamageScale) ?? false;
+                            // Check if target (monster) has VulnDamageScale property set
+                            // If property exists, use sqrt scaling; if null, use linear (default)
+                            var vulnDamageScale = WorldObject?.GetProperty(PropertyFloat.VulnDamageScale);
                             
-                            if (useVulnScaling)
+                            if (vulnDamageScale.HasValue)
                             {
                                 // Use square root scaling with divisor for capped/balanced growth
-                                float vulnMultiplier = (float)(WorldObject.GetProperty(PropertyFloat.VulnDamageScale) ?? 1.0f);
-                                vulnMultiplier = Math.Max(vulnMultiplier, 0.0f); // Ensure non-negative
+                                float vulnMultiplier = Math.Max((float)vulnDamageScale.Value, 0.0f); // Ensure non-negative
                                 
                                 // Square root with divisor for slower growth: sqrt(augs / 100) * multiplier
                                 float sqrtBonus = (float)(Math.Sqrt(lifeAugs / 100.0) * vulnMultiplier);
@@ -443,27 +443,49 @@ namespace ACE.Server.WorldObjects.Managers
             for (int x = 0; x < LifeAugAmt; x++)
             {
                 if (x < 10)
+                {
                     bonus += 0.01f;
+                }
                 else if (x < 30)
+                {
                     bonus += 0.005f;
+                }
                 else if (x < 50)
+                {
                     bonus += 0.0025f;
+                }
                 else if (x < 70)
+                {
                     bonus += 0.00125f;
+                }
                 else if (x < 100)
+                {
                     bonus += 0.000625f;
+                }
                 else if (x < 120)
+                {
                     bonus += 0.000312f;
+                }
                 else if (x < 150)
+                {
                     bonus += 0.000156f;
+                }
                 else if (x < 175)
+                {
                     bonus += 0.000078f;
+                }
                 else if (x < 200)
+                {
                     bonus += 0.000039f;
+                }
                 else if (x < 225)
+                {
                     bonus += 0.0000195f;
+                }
                 else
+                {
                     bonus += 0.0000100f;
+                }
             }
             
             return bonus;
@@ -480,16 +502,15 @@ namespace ACE.Server.WorldObjects.Managers
             
             float lifeAugBonus = GetLifeAugProtectRating(lifeAugCount);
             
-            // Check if attacker uses multiplicative calculation (per-monster setting)
-            bool useMultiplicative = attacker?.GetProperty(PropertyBool.UseMultiplicativeLifeAugCalc) ?? false;
+            // Check if attacker has WarHollowMultiplier property set (per-monster setting)
+            // If property exists, use multiplicative calculation; if null, use additive (default)
+            var warHollowMultiplier = attacker?.GetProperty(PropertyFloat.WarHollowMultiplier);
             
-            if (useMultiplicative)
+            if (warHollowMultiplier.HasValue)
             {
                 // Simple divisor system: WarHollowMultiplier divides the life aug bonus effectiveness
                 // Higher value = less protection = more damage gets through
-                // Formula based on working implementation from testing (4.0 worked well)
-                float multiplier = (float)(attacker.GetProperty(PropertyFloat.WarHollowMultiplier) ?? 4.0);
-                multiplier = Math.Max(multiplier, 0.001f); // Prevent division by zero and ensure positive
+                float multiplier = Math.Max((float)warHollowMultiplier.Value, 0.001f); // Prevent division by zero and ensure positive
                 float adjustedLifeAugBonus = lifeAugBonus / multiplier;
                 
                 // Apply the adjusted bonus with minimum clamp to prevent near-zero damage

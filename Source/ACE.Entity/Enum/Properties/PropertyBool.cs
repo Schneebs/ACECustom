@@ -192,8 +192,6 @@ namespace ACE.Entity.Enum.Properties
         CanGrapple                       = 9015,
         CanAOE                           = 9016,
         EnragedHotspot                   = 9017,
-        UseMultiplicativeLifeAugCalc     = 9018,
-        UseVulnDamageScale               = 9019,
         [AssessmentProperty]
         SplitArrows                      = 9030,
         IsSplitArrow                     = 9031,
