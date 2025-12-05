@@ -272,20 +272,8 @@ namespace ACE.Server.WorldObjects.Managers
                 }
                 else if (spell.School == MagicSchool.CreatureEnchantment && spell.IsHarmful)
                 {
-                    // Check if this is a vulnerability spell (StatModKey 64-70 = slash/pierce/bludge/fire/cold/acid/electric)
-                    if (spell.StatModKey == 64 || spell.StatModKey == 65 || spell.StatModKey == 66 
-                        || spell.StatModKey == 67 || spell.StatModKey == 68 || spell.StatModKey == 69 || spell.StatModKey == 70)
-                    {
-                        // Vulnerability spells should use LIFE aug count for consistency with war magic scaling
-                        luminanceAug -= player.LuminanceAugmentCreatureCount ?? 0.0f;
-                        entry.AugmentationLevelWhenCast = player.LuminanceAugmentLifeCount ?? 0;  // Store LIFE augs for vuln spells
-                    }
-                    else
-                    {
-                        // Other harmful creature enchantments use creature aug count normally
-                        luminanceAug -= player.LuminanceAugmentCreatureCount ?? 0.0f;
-                        entry.AugmentationLevelWhenCast = player.LuminanceAugmentCreatureCount ?? 0;
-                    }
+                    luminanceAug -= player.LuminanceAugmentCreatureCount ?? 0.0f;
+                    entry.AugmentationLevelWhenCast = player.LuminanceAugmentCreatureCount ?? 0;
                 }
 
                 if (spell.School == MagicSchool.ItemEnchantment)
