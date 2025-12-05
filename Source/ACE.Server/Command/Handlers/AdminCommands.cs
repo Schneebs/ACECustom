@@ -4415,6 +4415,37 @@ namespace ACE.Server.Command.Handlers
 
         }
 
+        // dispeltarget
+        [CommandHandler("dispeltarget", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 0, 
+            "Dispels all enchantments from the selected target (health bar must be visible).", "/dispeltarget")]
+        public static void HandleDispelTarget(Session session, params string[] parameters)
+        {
+            if (!session.Player.HealthQueryTarget.HasValue)
+            {
+                ChatPacket.SendServerMessage(session, 
+                    "Select a target first (view its health bar).", 
+                    ChatMessageType.Broadcast);
+                return;
+            }
+
+            var objectId = new ObjectGuid((uint)session.Player.HealthQueryTarget);
+            var wo = session.Player.CurrentLandblock?.GetObject(objectId);
+
+            if (wo == null)
+            {
+                ChatPacket.SendServerMessage(session, "Target not found.", ChatMessageType.Broadcast);
+                return;
+            }
+
+            wo.EnchantmentManager.DispelAllEnchantments();
+            
+            ChatPacket.SendServerMessage(session, 
+                $"Dispelled all enchantments from {wo.Name} ({wo.Guid})", 
+                ChatMessageType.Broadcast);
+            PlayerManager.BroadcastToAuditChannel(session.Player, 
+                $"{session.Player.Name} dispelled all enchantments from {wo.Name} (0x{wo.Guid:X8})");
+        }
+
         // event
         [CommandHandler("event", AccessLevel.Developer, CommandHandlerFlag.None, 2,
             "Maniuplates the state of an event",

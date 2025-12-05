@@ -113,17 +113,6 @@ namespace ACE.Server.WorldObjects
 
             var naturalResistMod = GetNaturalResistance(damageType);
 
-            // DEBUG: Show initial values
-            if (this is Player player)
-            {
-                Console.WriteLine($"[RESISTANCE DEBUG] Player: {player.Name}");
-                Console.WriteLine($"[RESISTANCE DEBUG] Damage Type: {damageType}");
-                Console.WriteLine($"[RESISTANCE DEBUG] Attacker: {attacker?.Name ?? "None"}");
-                Console.WriteLine($"[RESISTANCE DEBUG] Initial protMod: {protMod:F6} ({(1-protMod)*100:F2}% resistance)");
-                Console.WriteLine($"[RESISTANCE DEBUG] Initial vulnMod: {vulnMod:F6} ({(vulnMod-1)*100:F2}% vulnerability)");
-                Console.WriteLine($"[RESISTANCE DEBUG] Natural Resistance: {naturalResistMod:F6} ({(1-naturalResistMod)*100:F2}% resistance)");
-            }
-
             // Apply life aug calculation dynamically based on attacker's property
             // This allows per-monster control of life aug effectiveness
             if (this is Player targetPlayer && attacker != null)
@@ -131,22 +120,23 @@ namespace ACE.Server.WorldObjects
                 var lifeAugCount = targetPlayer.LuminanceAugmentLifeCount ?? 0;
                 if (lifeAugCount > 0)
                 {
+                    // Get the actual source creature (monster) - SpellProjectile passes itself as attacker,
+                    // but we need the ProjectileSource to access monster properties
+                    var actualAttacker = attacker;
+                    if (attacker is SpellProjectile spellProjectile && spellProjectile.ProjectileSource != null)
+                    {
+                        actualAttacker = spellProjectile.ProjectileSource;
+                    }
+                    
                     // Apply life aug bonus to protection mod based on attacker property
-                    protMod = Managers.EnchantmentManager.GetProtectionWithLifeAug(protMod, lifeAugCount, attacker);
+                    protMod = Managers.EnchantmentManager.GetProtectionWithLifeAug(protMod, lifeAugCount, actualAttacker);
                 }
             }
 
             // protection mod becomes either life protection or natural resistance,
             // whichever is more powerful (more powerful = lower value here)
             if (protMod > naturalResistMod)
-            {
-                Console.WriteLine($"[RESISTANCE DEBUG] Using natural resistance (more powerful)");
                 protMod = naturalResistMod;
-            }
-            else
-            {
-                Console.WriteLine($"[RESISTANCE DEBUG] Using life protection (more powerful)");
-            }
 
             // does this stack with natural resistance?
             if (this is Player player2)
@@ -155,30 +145,14 @@ namespace ACE.Server.WorldObjects
                 if (resistAug > 0)
                 {
                     var augFactor = Math.Min(1.0f, resistAug * 0.1f);
-                    var oldProtMod = protMod;
                     protMod *= 1.0f - augFactor;
-                    
-                    Console.WriteLine($"[RESISTANCE DEBUG] DRR: {resistAug} (Factor: {augFactor:F3})");
-                    Console.WriteLine($"[RESISTANCE DEBUG] DRR Applied: {oldProtMod:F6} × (1 - {augFactor:F3}) = {protMod:F6}");
-                    Console.WriteLine($"[RESISTANCE DEBUG] DRR Resistance: {(1-protMod)*100:F2}%");
-                }
-                else
-                {
-                    Console.WriteLine($"[RESISTANCE DEBUG] No DRR applied");
                 }
             }
 
             // vulnerability mod becomes either life vuln or weapon resistance mod,
             // whichever is more powerful
             if (vulnMod < weaponResistanceMod)
-            {
-                Console.WriteLine($"[RESISTANCE DEBUG] Using weapon resistance mod (more powerful)");
                 vulnMod = weaponResistanceMod;
-            }
-            else
-            {
-                Console.WriteLine($"[RESISTANCE DEBUG] Using life vulnerability (more powerful)");
-            }
 
             if (ignoreMagicResist)
             {
@@ -192,25 +166,13 @@ namespace ACE.Server.WorldObjects
 
                 protMod = GetNegativeRatingMod(addProt);
                 vulnMod = GetPositiveRatingMod(addVuln);
-                
-                Console.WriteLine($"[RESISTANCE DEBUG] Ignore Magic Resist applied");
             }
 
-            var finalMod = protMod * vulnMod;
-            
-            // DEBUG: Show final calculation
-            if (this is Player)
-            {
-                Console.WriteLine($"[RESISTANCE DEBUG] Final Calculation:");
-                Console.WriteLine($"[RESISTANCE DEBUG] protMod: {protMod:F6} ({(1-protMod)*100:F2}% resistance)");
-                Console.WriteLine($"[RESISTANCE DEBUG] vulnMod: {vulnMod:F6} ({(vulnMod-1)*100:F2}% vulnerability)");
-                Console.WriteLine($"[RESISTANCE DEBUG] Final Mod: {protMod:F6} × {vulnMod:F6} = {finalMod:F6}");
-                Console.WriteLine($"[RESISTANCE DEBUG] Final Resistance: {(1-finalMod)*100:F2}%");
-                Console.WriteLine($"[RESISTANCE DEBUG] Final Damage Multiplier: {finalMod:F6}");
-                Console.WriteLine($"[RESISTANCE DEBUG] ========================================");
-            }
+            // Vuln scaling is now handled at CAST time in EnchantmentManager.BuildEntry
+            // based on the target monster's properties (UseVulnDamageScale, VulnDamageScale)
+            // No additional modification needed at damage time
 
-            return finalMod;
+            return protMod * vulnMod;
         }
 
         public virtual float GetNaturalResistance(DamageType damageType)
