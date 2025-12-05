@@ -237,7 +237,7 @@ namespace ACE.Entity.Enum.Properties
         EnrageDamageMultiplier         = 9011,
         EnrageDamageReduction          = 9012,
         EnrageThreshold                = 9013,
-        WarHollowMultiplier            = 9014,
+        WarLifeAugPenetration          = 9014,
         VulnDamageScale                = 9015,
         [AssessmentProperty]
         SplitArrowRange                 = 9032,

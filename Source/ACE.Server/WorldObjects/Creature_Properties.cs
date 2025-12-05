@@ -113,23 +113,54 @@ namespace ACE.Server.WorldObjects
 
             var naturalResistMod = GetNaturalResistance(damageType);
 
-            // Apply life aug calculation dynamically based on attacker's property
-            // This allows per-monster control of life aug effectiveness
-            if (this is Player targetPlayer && attacker != null)
+            // Apply WarLifeAugPenetration for WAR MAGIC projectiles only
+            // Allows monsters to penetrate life aug protection with war spells
+            // Melee/missile use IgnoreMagicResist for hollow behavior instead
+            if (this is Player && attacker != null && protMod < 1.0f)
             {
-                var lifeAugCount = targetPlayer.LuminanceAugmentLifeCount ?? 0;
-                if (lifeAugCount > 0)
+                // Check if this is specifically a WAR MAGIC projectile (not void/life/melee/missile)
+                bool isWarMagic = false;
+                WorldObject sourceCreature = null;
+                
+                if (attacker is SpellProjectile spellProjectile && spellProjectile.ProjectileSource != null)
                 {
-                    // Get the actual source creature (monster) - SpellProjectile passes itself as attacker,
-                    // but we need the ProjectileSource to access monster properties
-                    var actualAttacker = attacker;
-                    if (attacker is SpellProjectile spellProjectile && spellProjectile.ProjectileSource != null)
+                    // Only apply for War Magic school
+                    if (spellProjectile.Spell?.School == MagicSchool.WarMagic)
                     {
-                        actualAttacker = spellProjectile.ProjectileSource;
+                        isWarMagic = true;
+                        sourceCreature = spellProjectile.ProjectileSource;
                     }
-                    
-                    // Apply life aug bonus to protection mod based on attacker property
-                    protMod = Managers.EnchantmentManager.GetProtectionWithLifeAug(protMod, lifeAugCount, actualAttacker);
+                }
+                
+                // Only apply WarLifeAugPenetration for war magic
+                if (isWarMagic && sourceCreature != null)
+                {
+                    var lifeAugPenetration = sourceCreature.GetProperty(PropertyFloat.WarLifeAugPenetration);
+                    if (lifeAugPenetration.HasValue)
+                    {
+                        // Get protection enchantments to find stored aug counts (honors caster's power)
+                        var typeFlags = EnchantmentTypeFlags.Float | EnchantmentTypeFlags.SingleStat | EnchantmentTypeFlags.Multiplicative;
+                        var resistance = EnchantmentManager.GetResistanceKey(damageType);
+                        var protectionEnchantments = EnchantmentManager.GetEnchantments_TopLayer(typeFlags, (uint)resistance);
+                        
+                        // Get the highest stored aug count from protection enchantments
+                        long storedLifeAugs = 0;
+                        foreach (var enchantment in protectionEnchantments)
+                        {
+                            if (enchantment.StatModValue < 1.0f) // This is a protection (< 1.0)
+                            {
+                                long enchantmentAugCount = enchantment.AugmentationLevelWhenCast ?? 0;
+                                if (enchantmentAugCount > storedLifeAugs)
+                                    storedLifeAugs = enchantmentAugCount;
+                            }
+                        }
+                        
+                        // Apply WarLifeAugPenetration to reduce life aug protection effectiveness
+                        if (storedLifeAugs > 0)
+                        {
+                            protMod = Managers.EnchantmentManager.GetProtectionWithLifeAug(protMod, storedLifeAugs, sourceCreature);
+                        }
+                    }
                 }
             }
 

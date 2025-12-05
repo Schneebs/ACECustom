@@ -420,61 +420,98 @@ namespace ACE.Server.WorldObjects.Managers
         }
 
 
+        // Cache for life aug bonus calculations to avoid expensive loops on every attack
+        private static readonly Dictionary<long, float> LifeAugBonusCache = new Dictionary<long, float>();
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float GetLifeAugProtectRating(long LifeAugAmt)
         {
             if (LifeAugAmt <= 0)
                 return 0.0f;
 
+            // Check cache first
+            if (LifeAugBonusCache.TryGetValue(LifeAugAmt, out var cachedBonus))
+                return cachedBonus;
+
+            // Calculate bonus using tier math instead of loop - O(1) instead of O(n)
             float bonus = 0;
             
-            for (int x = 0; x < LifeAugAmt; x++)
+            // Tier 1: 0-9 (10 items) @ 0.01 each
+            int tier1 = (int)Math.Min(LifeAugAmt, 10);
+            bonus += tier1 * 0.01f;
+            
+            if (LifeAugAmt > 10)
             {
-                if (x < 10)
-                {
-                    bonus += 0.01f;
-                }
-                else if (x < 30)
-                {
-                    bonus += 0.005f;
-                }
-                else if (x < 50)
-                {
-                    bonus += 0.0025f;
-                }
-                else if (x < 70)
-                {
-                    bonus += 0.00125f;
-                }
-                else if (x < 100)
-                {
-                    bonus += 0.000625f;
-                }
-                else if (x < 120)
-                {
-                    bonus += 0.000312f;
-                }
-                else if (x < 150)
-                {
-                    bonus += 0.000156f;
-                }
-                else if (x < 175)
-                {
-                    bonus += 0.000078f;
-                }
-                else if (x < 200)
-                {
-                    bonus += 0.000039f;
-                }
-                else if (x < 225)
-                {
-                    bonus += 0.0000195f;
-                }
-                else
-                {
-                    bonus += 0.0000100f;
-                }
+                // Tier 2: 10-29 (20 items) @ 0.005 each
+                int tier2 = (int)Math.Min(LifeAugAmt - 10, 20);
+                bonus += tier2 * 0.005f;
             }
+            
+            if (LifeAugAmt > 30)
+            {
+                // Tier 3: 30-49 (20 items) @ 0.0025 each
+                int tier3 = (int)Math.Min(LifeAugAmt - 30, 20);
+                bonus += tier3 * 0.0025f;
+            }
+            
+            if (LifeAugAmt > 50)
+            {
+                // Tier 4: 50-69 (20 items) @ 0.00125 each
+                int tier4 = (int)Math.Min(LifeAugAmt - 50, 20);
+                bonus += tier4 * 0.00125f;
+            }
+            
+            if (LifeAugAmt > 70)
+            {
+                // Tier 5: 70-99 (30 items) @ 0.000625 each
+                int tier5 = (int)Math.Min(LifeAugAmt - 70, 30);
+                bonus += tier5 * 0.000625f;
+            }
+            
+            if (LifeAugAmt > 100)
+            {
+                // Tier 6: 100-119 (20 items) @ 0.000312 each
+                int tier6 = (int)Math.Min(LifeAugAmt - 100, 20);
+                bonus += tier6 * 0.000312f;
+            }
+            
+            if (LifeAugAmt > 120)
+            {
+                // Tier 7: 120-149 (30 items) @ 0.000156 each
+                int tier7 = (int)Math.Min(LifeAugAmt - 120, 30);
+                bonus += tier7 * 0.000156f;
+            }
+            
+            if (LifeAugAmt > 150)
+            {
+                // Tier 8: 150-174 (25 items) @ 0.000078 each
+                int tier8 = (int)Math.Min(LifeAugAmt - 150, 25);
+                bonus += tier8 * 0.000078f;
+            }
+            
+            if (LifeAugAmt > 175)
+            {
+                // Tier 9: 175-199 (25 items) @ 0.000039 each
+                int tier9 = (int)Math.Min(LifeAugAmt - 175, 25);
+                bonus += tier9 * 0.000039f;
+            }
+            
+            if (LifeAugAmt > 200)
+            {
+                // Tier 10: 200-224 (25 items) @ 0.0000195 each
+                int tier10 = (int)Math.Min(LifeAugAmt - 200, 25);
+                bonus += tier10 * 0.0000195f;
+            }
+            
+            if (LifeAugAmt > 225)
+            {
+                // Tier 11: 225+ @ 0.00001 each
+                int tier11 = (int)(LifeAugAmt - 225);
+                bonus += tier11 * 0.0000100f;
+            }
+            
+            // Cache the result for future lookups
+            LifeAugBonusCache[LifeAugAmt] = bonus;
             
             return bonus;
         }
@@ -490,15 +527,15 @@ namespace ACE.Server.WorldObjects.Managers
             
             float lifeAugBonus = GetLifeAugProtectRating(lifeAugCount);
             
-            // Check if attacker has WarHollowMultiplier property set (per-monster setting)
+            // Check if attacker has WarLifeAugPenetration property set (per-monster setting)
             // If property exists, use multiplicative calculation; if null, use additive (default)
-            var warHollowMultiplier = attacker?.GetProperty(PropertyFloat.WarHollowMultiplier);
+            var lifeAugPenetration = attacker?.GetProperty(PropertyFloat.WarLifeAugPenetration);
             
-            if (warHollowMultiplier.HasValue)
+            if (lifeAugPenetration.HasValue)
             {
-                // Simple divisor system: WarHollowMultiplier divides the life aug bonus effectiveness
+                // Simple divisor system: WarLifeAugPenetration divides the life aug bonus effectiveness
                 // Higher value = less protection = more damage gets through
-                float multiplier = Math.Max((float)warHollowMultiplier.Value, 0.001f); // Prevent division by zero and ensure positive
+                float multiplier = Math.Max((float)lifeAugPenetration.Value, 0.001f); // Prevent division by zero and ensure positive
                 float adjustedLifeAugBonus = lifeAugBonus / multiplier;
                 
                 // Apply the adjusted bonus with minimum clamp to prevent near-zero damage
