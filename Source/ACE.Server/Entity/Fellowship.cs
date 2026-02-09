@@ -6,6 +6,7 @@ using System.Linq;
 using ACE.Common;
 using ACE.Entity;
 using ACE.Entity.Enum;
+using ACE.Entity.Enum.Properties;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
@@ -514,7 +515,7 @@ namespace ACE.Server.Entity
         /// <param name="amount">The input amount of XP</param>
         /// <param name="xpType">The type of XP (quest XP is handled differently)</param>
         /// <param name="player">The fellowship member who originated the XP</param>
-        public void SplitXp(ulong amount, XpType xpType, ShareType shareType, Player player)
+        public void SplitXp(ulong amount, XpType xpType, ShareType shareType, Player player, int monsterTier = 0)
         {
             // https://asheron.fandom.com/wiki/Announcements_-_2002/02_-_Fever_Dreams#Letter_to_the_Players_1
 
@@ -529,6 +530,13 @@ namespace ACE.Server.Entity
 
                 foreach (var member in fellowshipMembers.Values)
                 {
+                    var shareAmount = perAmount;
+                    if (xpType == XpType.Kill && monsterTier > 0)
+                    {
+                        var memberTier = member.GetProperty(PropertyInt.PrestigeLevel) ?? 0;
+                        shareAmount = (long)Math.Round(shareAmount * PrestigeManager.GetXPRewardModifier(monsterTier));
+                        shareAmount = (long)Math.Round(shareAmount * PrestigeManager.GetXPPenaltyMultiplier(memberTier, monsterTier));
+                    }
 
                     var fellowXpType = player == member ? XpType.Quest : XpType.Fellowship;
                     if (member.HasVitae && member.IsVPHardcore)
@@ -537,9 +545,8 @@ namespace ACE.Server.Entity
                     }
                     else
                     {
-                        member.GrantXP(perAmount, fellowXpType, shareType);
+                        member.GrantXP(shareAmount, fellowXpType, shareType);
                     }
-                    
                 }
             }
 
@@ -564,10 +571,17 @@ namespace ACE.Server.Entity
                     {
                         if (member == player && ServerConfig.fellowship_additive.Value)
                         {
-                            member.GrantXP((long)amount, xpType, shareType);
+                            member.GrantXP((long)amount, xpType, shareType, monsterTier);
                             continue;
                         }
-                        var shareAmount = (ulong)Math.Round(totalAmount * scalar);
+                        var shareAmount = Math.Round(totalAmount * scalar);
+
+                        if (xpType == XpType.Kill && monsterTier > 0)
+                        {
+                            var memberTier = member.GetProperty(PropertyInt.PrestigeLevel) ?? 0;
+                            shareAmount *= PrestigeManager.GetXPRewardModifier(monsterTier);
+                            shareAmount *= PrestigeManager.GetXPPenaltyMultiplier(memberTier, monsterTier);
+                        }
 
                         var fellowXpType = player == member ? xpType : XpType.Fellowship;
                         if (member.HasVitae && member.IsVPHardcore)
@@ -576,7 +590,7 @@ namespace ACE.Server.Entity
                         }
                         else
                         {
-                            member.GrantXP((long)shareAmount, fellowXpType, shareType);
+                            member.GrantXP((long)Math.Round(shareAmount), fellowXpType, shareType);
                         }
                     }
                 }
@@ -592,12 +606,19 @@ namespace ACE.Server.Entity
                     {
                         if (member == player && ServerConfig.fellowship_additive.Value)
                         {
-                            member.GrantXP((long)amount, xpType, shareType);
+                            member.GrantXP((long)amount, xpType, shareType, monsterTier);
                             continue;
                         }
                         var levelXPScale = (double)member.GetXPToNextLevel(member.Level.Value) / levelXPSum;
 
-                        var playerTotal = (ulong)Math.Round(amount * levelXPScale * scalar);
+                        var playerTotal = amount * levelXPScale * scalar;
+
+                        if (xpType == XpType.Kill && monsterTier > 0)
+                        {
+                            var memberTier = member.GetProperty(PropertyInt.PrestigeLevel) ?? 0;
+                            playerTotal *= PrestigeManager.GetXPRewardModifier(monsterTier);
+                            playerTotal *= PrestigeManager.GetXPPenaltyMultiplier(memberTier, monsterTier);
+                        }
 
                         var fellowXpType = player == member ? xpType : XpType.Fellowship;
 
@@ -607,7 +628,7 @@ namespace ACE.Server.Entity
                         }
                         else
                         {
-                            member.GrantXP((long)playerTotal, fellowXpType, shareType);
+                            member.GrantXP((long)Math.Round(playerTotal), fellowXpType, shareType);
                         }
                     }
                 }
@@ -620,7 +641,7 @@ namespace ACE.Server.Entity
         /// <param name="amount">The input amount of luminance</param>
         /// <param name="xpType">The type of lumaniance (quest luminance is handled differently)</param>
         /// <param name="player">The fellowship member who originated the luminance</param>
-        public void SplitLuminance(ulong amount, XpType xpType, ShareType shareType, Player player)
+        public void SplitLuminance(ulong amount, XpType xpType, ShareType shareType, Player player, int monsterTier = 0)
         {
             // https://asheron.fandom.com/wiki/Announcements_-_2002/02_-_Fever_Dreams#Letter_to_the_Players_1
 
@@ -629,7 +650,7 @@ namespace ACE.Server.Entity
             if (xpType == XpType.Quest)
             {
                 // quest luminance is not shared
-                player.GrantLuminance((long)amount, XpType.Quest, shareType);
+                player.GrantLuminance((long)amount, XpType.Quest, shareType, monsterTier);
             }
             else
             {
@@ -638,7 +659,7 @@ namespace ACE.Server.Entity
 
                 if (fellowshipMembers.Count == 0)
                 {
-                    player.GrantLuminance((long)amount, xpType, shareType);
+                    player.GrantLuminance((long)amount, xpType, shareType, monsterTier);
                     return;
                 }
 
@@ -651,7 +672,7 @@ namespace ACE.Server.Entity
                         eligibleMembers.Add((member, scalar));
                 }
 
-                var totalAmount = (ulong)Math.Round(amount * GetMemberSharePercent(eligibleMembers.Count));
+                var totalAmount = amount * GetMemberSharePercent(eligibleMembers.Count);
 
                 // Iterate fellowship members directly without .ToList() allocation
                 foreach (var (member, scalar) in eligibleMembers)
@@ -659,13 +680,20 @@ namespace ACE.Server.Entity
                     var fellowXpType = player == member ? xpType : XpType.Fellowship;
                     if (member == player && ServerConfig.fellowship_additive.Value)
                     {
-                        player.GrantLuminance((long)amount, fellowXpType, shareType);
+                        player.GrantLuminance((long)amount, fellowXpType, shareType, monsterTier);
                         continue;
                     }
 
-                    var playerTotal = (long)Math.Round(totalAmount * scalar);
+                    var playerTotal = totalAmount * scalar;
 
-                    member.GrantLuminance(playerTotal, fellowXpType, shareType);
+                    if (xpType == XpType.Kill && monsterTier > 0)
+                    {
+                        var memberTier = member.GetProperty(PropertyInt.PrestigeLevel) ?? 0;
+                        playerTotal *= PrestigeManager.GetXPRewardModifier(monsterTier);
+                        playerTotal *= PrestigeManager.GetXPPenaltyMultiplier(memberTier, monsterTier);
+                    }
+
+                    member.GrantLuminance((long)Math.Round(playerTotal), fellowXpType, shareType);
                 }
             }
         }
