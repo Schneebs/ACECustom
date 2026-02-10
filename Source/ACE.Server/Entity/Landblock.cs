@@ -291,6 +291,7 @@ namespace ACE.Server.Entity
             //}
             var objects = DatabaseManager.World.GetCachedInstancesByLandblock(Id.Landblock, variationId);
             var shardObjects = DatabaseManager.Shard.BaseDatabase.GetStaticObjectsByLandblock(Id.Landblock, variationId);
+            Console.WriteLine($"[Entity] Landblock {Id.Landblock:X4} (Var {variationId}): Loaded {objects.Count} World Objects, {shardObjects.Count} Shard Objects.");
             var factoryObjects = WorldObjectFactory.CreateNewWorldObjects(objects, shardObjects, null, variationId);
 
 
@@ -1046,6 +1047,10 @@ namespace ACE.Server.Entity
             }
 
             wo.CurrentLandblock = this;
+            if (wo.WeenieClassId == 835)
+            {
+                Console.WriteLine($"[DEBUG-835] AddWorldObjectInternal: Spawning {wo.Name} ({wo.Guid:X8}) in Landblock {Id:X8} (Var:{VariationId}, WO-Var:{wo.Location.Variation})");
+            }
             //if (this.Id.ToString().StartsWith("019E"))
             //{
             //    Console.WriteLine($"{wo.Name}, {wo.WeenieClassId} is spawning in landblock {this.Id} v:{wo.CurrentLandblock.VariationId} wo.v:{wo.Location.Variation}");
@@ -1068,12 +1073,16 @@ namespace ACE.Server.Entity
                     if (wo.Generator != null)
                     {
                         log.Debug($"AddWorldObjectInternal: couldn't spawn 0x{wo.Guid}:{wo.Name} [{wo.WeenieClassId} - {wo.WeenieType}] at {wo.Location.ToLOCString()} from generator {wo.Generator.WeenieClassId} - 0x{wo.Generator.Guid}:{wo.Generator.Name}");
+                        if (wo.WeenieClassId == 835) Console.WriteLine($"[DEBUG-835] AddWorldObjectInternal: Failed to spawn Ven Ounan (From Generator?).");
                         wo.NotifyOfEvent(RegenerationType.PickUp); // Notify generator the generated object is effectively destroyed, use Pickup to catch both cases.
                     }
                     else if (wo.IsGenerator) // Some generators will fail random spawns if they're circumference spans over water or cliff edges
-                        log.Debug($"AddWorldObjectInternal: couldn't spawn generator 0x{wo.Guid}:{wo.Name} [{wo.WeenieClassId} - {wo.WeenieType}] at {wo.Location.ToLOCString()}");
+                         log.Debug($"AddWorldObjectInternal: couldn't spawn generator 0x{wo.Guid}:{wo.Name} [{wo.WeenieClassId} - {wo.WeenieType}] at {wo.Location.ToLOCString()}");
                     else if (wo.ProjectileTarget == null && wo is not SpellProjectile)
+                    {
                         Console.WriteLine($"AddWorldObjectInternal: couldn't spawn 0x{wo.Guid}:{wo.Name} [{wo.WeenieClassId} - {wo.WeenieType}] at {wo.Location.ToLOCString()}");
+                        if (wo.WeenieClassId == 835) Console.WriteLine($"[DEBUG-835] AddWorldObjectInternal: Failed to spawn Ven Ounan (Static?). Reason: AddPhysicsObj failed.");
+                    }
 
                     return false;
                 }

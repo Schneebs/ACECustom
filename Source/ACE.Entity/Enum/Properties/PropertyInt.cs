@@ -711,6 +711,9 @@ namespace ACE.Entity.Enum.Properties
         CreatureVariant                         = 9038, // Shiny variant on live creature
         CapturedCreatureVariant                 = 9039, // Shiny status copied to essence
 
+        [SendOnLogin]
+        [AssessmentProperty]
+        PrestigeLevel = 9040,
     }
 
     public static class PropertyIntExtensions
