@@ -713,7 +713,10 @@ namespace ACE.Entity.Enum.Properties
 
         [SendOnLogin]
         [AssessmentProperty]
-        PrestigeLevel = 9040,
+        PrestigeLevel = 9041,
+
+        // Portal
+        PortalUseCount                          = 9040, // Number of times a portal may be used before destroying itself
     }
 
     public static class PropertyIntExtensions

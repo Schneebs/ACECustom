@@ -1684,6 +1684,7 @@ namespace ACE.Server.Command.Handlers
         public static void HandleClearDynamicEmotes(Session session, params string[] parameters)
         {
             QuestManager.ClearDynamicQuestEmotes();
+            PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} cleared dynamic emotes cache.");
         }
 
         // adminui
@@ -1889,6 +1890,33 @@ namespace ACE.Server.Command.Handlers
             // @unfreeze - Unfreezes the selected target.
 
             // TODO: output
+        }
+
+        [CommandHandler("ucmcheck", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, "Initiates a UCM check on the selected player.")]
+        public static void HandleUCMCheck(Session session, params string[] parameters)
+        {
+            var target = CommandHandlerHelper.GetSelected(session);
+            if (target == null || !(target is Player targetPlayer))
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("You must select a player to use this command.", ChatMessageType.System));
+                return;
+            }
+
+            if (targetPlayer.UCMChecker.IsChecking)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"{targetPlayer.Name} is already undergoing a UCM check.", ChatMessageType.System));
+                return;
+            }
+
+            bool started = targetPlayer.UCMChecker.Start(targetPlayer);
+            if (started)
+            {
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"Admin {session.Player.Name} initiated a UCM check on {targetPlayer.Name}.");
+            }
+            else
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"UCM check on {targetPlayer.Name} failed to start.", ChatMessageType.System));
+            }
         }
 
         // gag < char name >
@@ -2370,7 +2398,11 @@ namespace ACE.Server.Command.Handlers
                     {
                         player.Smite(session.Player, ServerConfig.smite_uses_takedamage.Value);
 
-                        PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} used smite on {player.Name}");
+                        PlayerManager.BroadcastToAuditChannel(session.Player, $"Admin {session.Player.Name} used smite on {player.Name}");
+                        
+                        // Global broadcast when smiting a player
+                        PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{player.Name} was smited.", ChatMessageType.Broadcast));
+                        
                         return;
                     }
 
@@ -2392,7 +2424,13 @@ namespace ACE.Server.Command.Handlers
                     {
                         wo.Smite(session.Player, ServerConfig.smite_uses_takedamage.Value);
 
-                        PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} used smite on {wo.Name} (0x{wo.Guid:X8})");
+                        PlayerManager.BroadcastToAuditChannel(session.Player, $"Admin {session.Player.Name} used smite on {wo.Name} (0x{wo.Guid:X8})");
+
+                        if (wo is Player smitedPlayer)
+                        {
+                            // Global broadcast when smiting a player
+                            PlayerManager.BroadcastToAll(new GameMessageSystemChat($"{smitedPlayer.Name} was smited.", ChatMessageType.Broadcast));
+                        }
                     }
                 }
                 else
@@ -2721,6 +2759,21 @@ namespace ACE.Server.Command.Handlers
             // @unlock - Cleans the SQL lock on either everyone or the given player.
 
             // TODO: output
+            if (session.AccessLevel >= AccessLevel.Admin && parameters.Length >= 1)
+            {
+                WorldObject target = null;
+                if (parameters[0].Length > 2 && parameters[0].StartsWith("0x", StringComparison.OrdinalIgnoreCase) && uint.TryParse(parameters[0].Substring(2), System.Globalization.NumberStyles.HexNumber, null, out var guid))
+                    target = CommandHandlerHelper.GetWorldObjectByGuid(session, guid);
+                else if (uint.TryParse(parameters[0], out var decimalGuid))
+                    target = CommandHandlerHelper.GetWorldObjectByGuid(session, decimalGuid);
+                else
+                    target = PlayerManager.GetOnlinePlayer(parameters[0]);
+
+                if (target != null)
+                {
+                    PlayerManager.BroadcastToAuditChannel(session.Player, $"Admin {session.Player.Name} used /unlock on {target.Name}:{target.Guid} at {target.Location}");
+                }
+            }
         }
 
         // gamecast <message>
@@ -2740,8 +2793,11 @@ namespace ACE.Server.Command.Handlers
 
             var msg = $"Broadcast from {(session != null ? session.Player.Name : "System")}> {string.Join(" ", parameters)}";
             GameMessageSystemChat sysMessage = new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast);
-            DiscordChatManager.SendDiscordMessage("", msg, ConfigManager.Config.Chat.GeneralChannelId);
-            DiscordChatManager.SendDiscordMessage("", msg, ConfigManager.Config.Chat.EventsChannelId);
+            if (ACE.Server.Managers.ServerConfig.discord_broadcast_level.Value >= (long)ACE.Common.DiscordLogLevel.Info)
+            {
+                _ = DiscordChatManager.SendDiscordMessage("", msg, ConfigManager.Config.Chat.GeneralChannelId);
+                _ = DiscordChatManager.SendDiscordMessage("", msg, ConfigManager.Config.Chat.EventsChannelId);
+            }
             PlayerManager.BroadcastToAll(sysMessage);
             PlayerManager.LogBroadcastChat(Channel.AllBroadcast, session?.Player, msg);
         }
@@ -3156,7 +3212,7 @@ namespace ACE.Server.Command.Handlers
                 msg = $"House Dump for {wo.Name} (0x{wo.Guid})\n";
                 msg += $"===House=======================================\n";
                 msg += $"Name: {house.Name} | {house.WeenieClassName} | WCID: {house.WeenieClassId} | GUID: 0x{house.Guid}\n";
-                msg += $"Location: {house.Location.ToLOCString()}\n";
+                msg += $"Location: {house.Location.ToString()}\n";
                 msg += $"HouseID: {house.HouseId}\n";
                 msg += $"HouseType: {house.HouseType} ({(int)house.HouseType})\n";
                 msg += $"HouseStatus: {house.HouseStatus} ({(int)house.HouseStatus})\n";
@@ -3174,7 +3230,7 @@ namespace ACE.Server.Command.Handlers
                     foreach (var link in house.LinkedHouses)
                     {
                         msg += $"Name: {link.Name} | {link.WeenieClassName} | WCID: {link.WeenieClassId} | GUID: 0x{link.Guid}\n";
-                        msg += $"Location: {link.Location.ToLOCString()}\n";
+                        msg += $"Location: {link.Location}\n";
                     }
                     session.Player.SendMessage(msg, ChatMessageType.System);
                 }
@@ -3183,7 +3239,7 @@ namespace ACE.Server.Command.Handlers
                 msg += $"===SlumLord====================================\n";
                 var slumLord = house.SlumLord;
                 msg += $"Name: {slumLord.Name} | {slumLord.WeenieClassName} | WCID: {slumLord.WeenieClassId} | GUID: 0x{slumLord.Guid}\n";
-                msg += $"Location: {slumLord.Location.ToLOCString()}\n";
+                msg += $"Location: {slumLord.Location}\n";
                 msg += $"MinLevel: {slumLord.MinLevel}\n";
                 msg += $"AllegianceMinLevel: {slumLord.AllegianceMinLevel ?? 0}\n";
                 msg += $"HouseRequiresMonarch: {slumLord.HouseRequiresMonarch}\n";
@@ -3214,7 +3270,7 @@ namespace ACE.Server.Command.Handlers
                 {
                     msg = "";
                     msg += $"===HouseData===================================\n";
-                    msg += $"Location: {houseData.Position.ToLOCString()}\n";
+                    msg += $"Location: {houseData.Position}\n";
                     msg += $"Type: {houseData.Type}\n";
                     msg += $"BuyTime: {(houseData.BuyTime > 0 ? $"{Time.GetDateTimeFromTimestamp(houseData.BuyTime).ToLocalTime()}" : "N/A")} ({houseData.BuyTime})\n";
                     msg += $"RentTime: {(houseData.RentTime > 0 ? $"{Time.GetDateTimeFromTimestamp(houseData.RentTime).ToLocalTime()}" : "N/A")} ({houseData.RentTime})\n";
@@ -3233,7 +3289,7 @@ namespace ACE.Server.Command.Handlers
                         msg = "";
                         msg += $"===Basement====================================\n";
                         msg += $"Name: {basement.Name} | {basement.WeenieClassName} | WCID: {basement.WeenieClassId} | GUID: 0x{basement.Guid}\n";
-                        msg += $"Location: {basement.Location.ToLOCString()}\n";
+                        msg += $"Location: {basement.Location}\n";
                         msg += $"HouseMaxHooksUsable: {basement.HouseMaxHooksUsable}\n";
                         msg += $"HouseCurrentHooksUsable: {basement.HouseCurrentHooksUsable}\n";
                         session.Player.SendMessage(msg, ChatMessageType.System);
@@ -3370,7 +3426,7 @@ namespace ACE.Server.Command.Handlers
                 foreach (var chest in house.Storage)
                 {
                     msg += $"Name: {chest.Name} | {chest.WeenieClassName} | WCID: {chest.WeenieClassId} | GUID: 0x{chest.Guid}\n";
-                    msg += $"Location: {chest.Location.ToLOCString()}\n";
+                    msg += $"Location: {chest.Location}\n";
                 }
             }
 
@@ -3387,7 +3443,7 @@ namespace ACE.Server.Command.Handlers
                 foreach (var hook in house.Hooks)
                 {
                     msg += $"Name: {hook.Name} | {hook.WeenieClassName} | WCID: {hook.WeenieClassId} | GUID: 0x{hook.Guid}\n";
-                    // msg += $"Location: {hook.Location.ToLOCString()}\n";
+                    // msg += $"Location: {hook.Location}\n";
                     msg += $"HookType: {(HookType)hook.HookType} ({hook.HookType}){(hook.HasItem ? $" | Item on Hook: {hook.Item.Name} (0x{hook.Item.Guid}:{hook.Item.WeenieClassId}:{hook.Item.WeenieType}) | HookGroup: {hook.Item.HookGroup ?? HookGroupType.Undef} ({(int)(hook.Item.HookGroup ?? 0)})" : "")}\n";
                 }
             }
@@ -3396,15 +3452,15 @@ namespace ACE.Server.Command.Handlers
             {
                 msg += $"===BootSpot for House 0x{house.Guid}===============\n";
                 msg += $"Name: {house.BootSpot.Name} | {house.BootSpot.WeenieClassName} | WCID: {house.BootSpot.WeenieClassId} | GUID: 0x{house.BootSpot.Guid}\n";
-                msg += $"Location: {house.BootSpot.Location.ToLOCString()}\n";
+                msg += $"Location: {house.BootSpot.Location}\n";
             }
 
             if (house.HousePortal != null)
             {
                 msg += $"===HousePortal for House 0x{house.Guid}============\n";
                 msg += $"Name: {house.HousePortal.Name} | {house.HousePortal.WeenieClassName} | WCID: {house.HousePortal.WeenieClassId} | GUID: 0x{house.HousePortal.Guid}\n";
-                msg += $"Location: {house.HousePortal.Location.ToLOCString()}\n";
-                msg += $"Destination: {house.HousePortal.Destination.ToLOCString()}\n";
+                msg += $"Location: {house.HousePortal.Location}\n";
+                msg += $"Destination: {house.HousePortal.Destination}\n";
             }
 
             return msg;
@@ -3878,6 +3934,9 @@ namespace ACE.Server.Command.Handlers
             if (ParseCreateParameters(session, parameters, false, out Weenie weenie, out int numToSpawn, out int? palette, out float? shade, out _))
             {
                 TryCreateObject(session, weenie, numToSpawn, palette, shade);
+
+                if (session.AccessLevel >= AccessLevel.Admin)
+                    PlayerManager.BroadcastToAuditChannel(session.Player, $"Admin {session.Player.Name} created {numToSpawn}x {weenie.ClassName} ({weenie.WeenieClassId}) using /create.");
             }
         }
 
@@ -3903,35 +3962,44 @@ namespace ACE.Server.Command.Handlers
         public static void HandleQuestClear(Session session, params string[] parameters)
         {
             DatabaseManager.World.ClearCachedQuest(parameters[0]);
+            PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} cleared quest cache for '{parameters[0]}'.");
         }
 
         [CommandHandler("clearallquests", AccessLevel.Admin, CommandHandlerFlag.None, 0)]
         public static void HandleQuestClearAll(Session session, params string[] parameters)
         {
             DatabaseManager.World.ClearAllCachedQuests();
+            PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} cleared all quest caches.");
         }
 
-        [CommandHandler("clearevent", AccessLevel.Admin, CommandHandlerFlag.None, 1, "Clears a cached event by name", "<eventname>")]
+        [CommandHandler("clearevent", AccessLevel.Developer, CommandHandlerFlag.None, 1, "Reloads an event from database", "<eventname>")]
         public static void HandleEventClear(Session session, params string[] parameters)
         {
-            var cleared = DatabaseManager.World.ClearCachedEvent(parameters[0]);
-            if (cleared)
-                CommandHandlerHelper.WriteOutputInfo(session, $"Event '{parameters[0]}' cleared from cache");
+            var eventName = parameters[0];
+            var reloaded = Managers.EventManager.ReloadEvent(eventName);
+            if (reloaded)
+            {
+                var state = Managers.EventManager.GetEventStatus(eventName);
+                CommandHandlerHelper.WriteOutputInfo(session, $"Event '{eventName}' reloaded from database (State: {state})");
+              PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} cleared event cache for '{parameters[0]}'.");
+            }
             else
-                CommandHandlerHelper.WriteOutputInfo(session, $"Event '{parameters[0]}' was not in cache");
+                CommandHandlerHelper.WriteOutputInfo(session, $"Event '{eventName}' not found in database");
         }
 
-        [CommandHandler("clearallevents", AccessLevel.Admin, CommandHandlerFlag.None, 0, "Clears all cached events")]
+        [CommandHandler("clearallevents", AccessLevel.Developer, CommandHandlerFlag.None, 0, "Reloads all events from database")]
         public static void HandleEventClearAll(Session session, params string[] parameters)
         {
-            DatabaseManager.World.ClearAllCachedEvents();
-            CommandHandlerHelper.WriteOutputInfo(session, "All events cleared from cache");
+            Managers.EventManager.ReloadAllEvents();
+            CommandHandlerHelper.WriteOutputInfo(session, $"All events reloaded from database ({Managers.EventManager.Events.Count} events)");
+            PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} cleared all event caches.");
         }
 
         [CommandHandler("clearspellcache", AccessLevel.Admin, CommandHandlerFlag.None, 0)]
         public static void HandleClearSpellCache(Session session, params string[] parameters)
         {
             DatabaseManager.World.ClearSpellCache();
+            PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} cleared the spell cache.");
         }
 
         [CommandHandler("testdynamic", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 1)]
@@ -4170,9 +4238,9 @@ namespace ACE.Server.Command.Handlers
             }
 
             if (numToSpawn > 1)
-                PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} has created {numToSpawn} {obj.Name} (0x{obj.Guid:X8}) near {obj.Location.ToLOCString()}.");
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} has created {numToSpawn} {obj.Name} (0x{obj.Guid:X8}) near {obj.Location}.");
             else
-                PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} has created {obj.Name} (0x{obj.Guid:X8}) at {obj.Location.ToLOCString()}.");
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} has created {obj.Name} (0x{obj.Guid:X8}) at {obj.Location}.");
         }
 
         public static Position LastSpawnPos;
@@ -4248,9 +4316,9 @@ namespace ACE.Server.Command.Handlers
             }
 
             if (count == 1)
-                PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} has created {first.Name} (0x{first.Guid:X8}) at {first.Location.ToLOCString()}.");
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} has created {first.Name} (0x{first.Guid:X8}) at {first.Location}.");
             else
-                PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} has created {count}x {first.Name} at {first.Location.ToLOCString()}.");
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} has created {count}x {first.Name} at {first.Location}.");
         }
 
         /// <summary>
@@ -4367,6 +4435,18 @@ namespace ACE.Server.Command.Handlers
             }
             else notOK = true;
             if (notOK) ChatPacket.SendServerMessage(session, "Appraise a locked target before using @crack", ChatMessageType.Broadcast);
+            else 
+            {
+                 // Audit log for successful crack execution logic (even if it failed to unlock due to mechanics, the admin tried it)
+                 // Re-locate object to log it correctly as we established it exists in the if/else logic above
+                 if (session.AccessLevel >= AccessLevel.Admin && session.Player.CurrentAppraisalTarget.HasValue)
+                 {
+                     var objectId = new ObjectGuid((uint)session.Player.CurrentAppraisalTarget);
+                     var wo = session.Player.CurrentLandblock?.GetObject(objectId);
+                     if (wo != null)
+                         PlayerManager.BroadcastToAuditChannel(session.Player, $"Admin {session.Player.Name} used /crack on {wo.Name}:{wo.Guid} at {wo.Location}");
+                 }
+            }
         }
 
         /// <summary>
@@ -4483,10 +4563,18 @@ namespace ACE.Server.Command.Handlers
             if (parameters.Length > 0)
             {
                 var player = PlayerManager.GetOnlinePlayer(parameters[0]);
+                if (player == null)
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"Player {parameters[0]} not found.", ChatMessageType.Broadcast));
+                    return;
+                }
+                
                 player.EnchantmentManager.DispelAllEnchantments();
                 // remove all enchantments from equipped items for now
                 foreach (var item in player.EquippedObjects.Values)
                     item.EnchantmentManager.DispelAllEnchantments();
+                
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} dispelled all enchantments from {player.Name}.");
             }
             else
             {
@@ -4494,6 +4582,8 @@ namespace ACE.Server.Command.Handlers
                 // remove all enchantments from equipped items for now
                 foreach (var item in session.Player.EquippedObjects.Values)
                     item.EnchantmentManager.DispelAllEnchantments();
+                
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"{session.Player.Name} dispelled all enchantments from themselves.");
             }
 
 
@@ -5632,15 +5722,6 @@ namespace ACE.Server.Command.Handlers
             HandleGameCastEmote(session, parameters);
         }
 
-        // location
-        [CommandHandler("location", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 0)]
-        public static void HandleLocation(Session session, params string[] parameters)
-        {
-            // @location - Causes your current location to be continuously displayed on the screen.
-
-            // TODO: output
-        }
-
         // morph
         [CommandHandler("morph", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 1,
             "Morphs your bodily form into that of the specified creature. Be careful with this one!",
@@ -5881,6 +5962,7 @@ namespace ACE.Server.Command.Handlers
                     {
                         creature.QuestManager.EraseAll();
                         session.Player.SendMessage($"All quests erased.");
+                        PlayerManager.BroadcastToAuditChannel(session.Player, $"Admin {session.Player.Name} erased all quests for {creature.Name}.");
                         return;
                     }
 
@@ -5891,6 +5973,7 @@ namespace ACE.Server.Command.Handlers
                     }
                     creature.QuestManager.Erase(questName);
                     session.Player.SendMessage($"{questName} erased.");
+                    PlayerManager.BroadcastToAuditChannel(session.Player, $"Admin {session.Player.Name} erased quest stamp {questName} for {creature.Name}.");
                     return;
                 }
 
@@ -6436,8 +6519,11 @@ namespace ACE.Server.Command.Handlers
             //session.Player.HandleActionWorldBroadcast($"{msg}", ChatMessageType.WorldBroadcast);
 
             GameMessageSystemChat sysMessage = new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast);
-            DiscordChatManager.SendDiscordMessage("BROADCAST", msg, ConfigManager.Config.Chat.GeneralChannelId);
-            DiscordChatManager.SendDiscordMessage("BROADCAST", msg, ConfigManager.Config.Chat.EventsChannelId);
+            if (ACE.Server.Managers.ServerConfig.discord_broadcast_level.Value >= (long)ACE.Common.DiscordLogLevel.Info)
+            {
+                _ = DiscordChatManager.SendDiscordMessage("BROADCAST", msg, ConfigManager.Config.Chat.GeneralChannelId);
+                _ = DiscordChatManager.SendDiscordMessage("BROADCAST", msg, ConfigManager.Config.Chat.EventsChannelId);
+            }
             PlayerManager.BroadcastToAll(sysMessage);
             PlayerManager.LogBroadcastChat(Channel.AllBroadcast, session?.Player, msg);
         }
@@ -6851,6 +6937,9 @@ namespace ACE.Server.Command.Handlers
             salvageBag.NumItemsInMaterial = numItemsInMaterial;
 
             session.Player.TryCreateInInventoryWithNetworking(salvageBag);
+
+            if (session.AccessLevel >= AccessLevel.Admin)
+                PlayerManager.BroadcastToAuditChannel(session.Player, $"Admin {session.Player.Name} created a salvage bag of type {materialType} (Structure: {structure}, Workmanship: {workmanship}, NumItems: {numItemsInMaterial}).");
         }
 
         [CommandHandler("setlbenviron", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 0,
@@ -6953,7 +7042,7 @@ namespace ACE.Server.Command.Handlers
 
             if (obj is Player)
             {
-                HandleTeleToMe(session, new string[] { obj.Name });
+                TeleportCommands.HandleTeleToMe(session, [obj.Name]);
                 return;
             }
 
@@ -7008,9 +7097,12 @@ namespace ACE.Server.Command.Handlers
             var roll = new Random().Next(1, 100);
             var msg = $"-=Tonight's raffle number is {roll}. Congratz to tonight's winner!=-";
             PlayerManager.BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast));
-            DiscordChatManager.SendDiscordMessage("", msg, ConfigManager.Config.Chat.GeneralChannelId);
-            DiscordChatManager.SendDiscordMessage("", msg, ConfigManager.Config.Chat.EventsChannelId);
-            DiscordChatManager.SendDiscordMessage("", msg, ConfigManager.Config.Chat.RaffleChannelId);
+            if (ACE.Server.Managers.ServerConfig.discord_broadcast_level.Value >= (long)ACE.Common.DiscordLogLevel.Info)
+            {
+                DiscordChatManager.SendDiscordMessage("", msg, ConfigManager.Config.Chat.GeneralChannelId);
+                DiscordChatManager.SendDiscordMessage("", msg, ConfigManager.Config.Chat.EventsChannelId);
+                DiscordChatManager.SendDiscordMessage("", msg, ConfigManager.Config.Chat.RaffleChannelId);
+            }
         }
 
         [CommandHandler("sqc", AccessLevel.Developer, CommandHandlerFlag.None, "Shortcut for serverquestcompletions", "")]

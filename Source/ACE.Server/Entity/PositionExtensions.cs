@@ -355,7 +355,7 @@ namespace ACE.Server.Entity
         public static bool AttemptToFixRotation(this Position pos, WorldObject wo, PositionType positionType)
         {
             log.Warn($"detected bad quaternion x y z w for {wo.Name} (0x{wo.Guid}) | WCID: {wo.WeenieClassId} | WeenieType: {wo.WeenieType} | PositionType: {positionType}");
-            log.Warn($"before fix: {pos.ToLOCString()}");
+            log.Warn($"before fix: {pos}");
 
             var normalized = Quaternion.Normalize(pos.Rotation);
 
@@ -364,7 +364,7 @@ namespace ACE.Server.Entity
             if (success)
                 pos.Rotation = normalized;
 
-            log.Warn($" after fix: {pos.ToLOCString()}");
+            log.Warn($" after fix: {pos}");
 
             return success;
         }

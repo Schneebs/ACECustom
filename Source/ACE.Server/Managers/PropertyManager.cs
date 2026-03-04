@@ -447,6 +447,19 @@ namespace ACE.Server.Managers
         public static ConfigProperty<string> popup_welcome_olthoi { get; private set; } = new("Welcome to the Olthoi hive! Be sure to talk to the Olthoi Queen to receive the Olthoi protections granted by the energies of the hive.", "Welcome message displayed on the first login for an Olthoi Player");
         public static ConfigProperty<string> popup_motd { get; private set; } = new("", "Popup message of the day");
         public static ConfigProperty<string> server_motd { get; private set; } = new("", "Server message of the day");
+
+        // UCM Configuration
+        public static ConfigProperty<string> ucm_check_fail_teleport_location { get; private set; } = new("", "The location to send a player to when failing a UCM check. If blank, the player will be sent to the lifestone.");
+        public static ConfigProperty<long> ucm_check_timeout_seconds { get; private set; } = new(60, "The amount of time a player has to respond to a UCM check before failing to timeout.");
+        public static ConfigProperty<long> ucm_check_statue_wcid { get; private set; } = new(6076 /* Oak Target Drudge */, "The weenie ID to use as the template for the statue model. Statue properties will be overridden as needed.");
+        public static ConfigProperty<long> ucm_check_cooldown_seconds { get; private set; } = new(3600 /* 60 min */, "The minimum amount of time in seconds between random UCM checks on a single player.");
+        public static ConfigProperty<double> ucm_check_spawn_chance { get; private set; } = new(0.0000641782 /* 50% per 3 hours */, "The probability (0.0 to 1.0) per second to randomly trigger a UCM check. Chance for any period is = (1 - (1 - p) ^ seconds)");
+
+        // Discord Configuration
+        public static ConfigProperty<bool> discord_mirror_enabled { get; private set; } = new(true, "Master toggle for mirroring in-game chat (General/Trade/LFG/Society) to Discord.");
+        public static ConfigProperty<long> discord_audit_level { get; private set; } = new(1, "Controls Admin Audit logs. 0=None, 1=Info (Bans/Kicks), 2=Verbose (All commands).");
+        public static ConfigProperty<long> discord_broadcast_level { get; private set; } = new(1, "Controls World Broadcasts. 0=None, 1=Info (@broadcast/@event), 2=Verbose.");
+        public static ConfigProperty<long> discord_performance_level { get; private set; } = new(1, "Controls Performance Alerts. 0=None, 1=Info (Overload/Queue), 2=Verbose (ActionLag/SlowSave).");
     }
 
     public static class PropertyManager

@@ -59,7 +59,7 @@ namespace ACE.Server.WorldObjects
             if (lastDamager != null)
                 nearbyMsg = string.Format(deathMessage.Broadcast, Name, lastDamager.Name);
             else
-                nearbyMsg = deathMessage.Broadcast;
+                nearbyMsg = string.Format(deathMessage.Broadcast, Name);
 
             var broadcastMsg = new GameMessagePlayerKilled(nearbyMsg, Guid, lastDamager?.Guid ?? ObjectGuid.Invalid);
 
@@ -235,6 +235,9 @@ namespace ACE.Server.WorldObjects
 
             dieChain.AddAction(this, ActionType.PlayerDeath_CreateCorpseAndTeleport, () =>
             {
+                // If the checker is running, fail. Skip the teleport, as they'll already be sent home.
+                UCMChecker.FailActiveCheck(this, "died during test", /*doTeleport=*/false);
+
                 CreateCorpse(topDamager, hadVitae);
 
                 ThreadSafeTeleportOnDeath(); // enter portal space
@@ -260,14 +263,20 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
+        /// Retrieves the best location to teleport a player to on death.
+        /// </summary>
+        public Position GetDeathLocation()
+        {
+            // teleport to sanctuary or best location
+            return Sanctuary ?? Instantiation ?? Location;
+        }
+
+        /// <summary>
         /// Called when the player enters portal space after dying
         /// </summary>
         public void ThreadSafeTeleportOnDeath()
         {
-            // teleport to sanctuary or best location
-            var newPosition = Sanctuary ?? Instantiation ?? Location;
-
-            WorldManager.ThreadSafeTeleport(this, newPosition, new ActionEventDelegate(ActionType.PlayerDeath_EnqueueTeleport, () =>
+            WorldManager.ThreadSafeTeleport(this, GetDeathLocation(), new ActionEventDelegate(ActionType.PlayerDeath_EnqueueTeleport, () =>
             {
                 // Stand back up
                 SetCombatMode(CombatMode.NonCombat);
@@ -503,8 +512,6 @@ namespace ACE.Server.WorldObjects
 
             var numItemsDropped = GetNumItemsDropped(corpse);
 
-            var numCoinsDropped = GetNumCoinsDropped();
-
             var level = Level ?? 1;
             var canDropWielded = level >= 35;
 
@@ -528,14 +535,6 @@ namespace ACE.Server.WorldObjects
             var sorted = new DeathItems(inventory);
 
             var dropItems = new List<WorldObject>();
-
-            if (numCoinsDropped > 0)
-            {
-                // add pyreals to dropped items
-                var pyreals = SpendCurrency(coinStackWcid, (uint)numCoinsDropped);
-                dropItems.AddRange(pyreals);
-                //Console.WriteLine($"Dropping {numCoinsDropped} pyreals");
-            }
 
             // Remove the items from inventory
             for (var i = 0; i < numItemsDropped && i < sorted.Inventory.Count; i++)
@@ -611,6 +610,7 @@ namespace ACE.Server.WorldObjects
             dropItems.AddRange(destroyedItems);
 
             // send network messages
+            int numCoinsDropped = 0;
             var dropList = DropMessage(dropItems, numCoinsDropped);
             if (!string.IsNullOrWhiteSpace(dropList))
             {
@@ -690,18 +690,6 @@ namespace ACE.Server.WorldObjects
             }
 
             return numItemsDropped;
-        }
-
-        public int GetNumCoinsDropped()
-        {
-            // if level > 5, lose half coins
-            // (trade notes excluded)
-            var level = Level ?? 1;
-            var coins = CoinValue ?? 0;
-
-            var numCoinsDropped = level > 5 ? coins / 2 : 0;
-
-            return numCoinsDropped;
         }
 
         /// <summary>

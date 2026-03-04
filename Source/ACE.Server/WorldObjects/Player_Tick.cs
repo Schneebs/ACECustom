@@ -63,6 +63,8 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
+            UCMChecker.Tick(this);
+
             actionQueue.RunActions();
 
             if (nextAgeUpdateTime <= currentUnixTime)

@@ -352,12 +352,13 @@ namespace ACE.Server.Network
         /// <param name="rcvdSeq">the sequence of the packet that was just received.</param>
         private void DoRequestForRetransmission(uint rcvdSeq)
         {
+            if (session.IsTerminated) return;
             var desiredSeq = lastReceivedPacketSequence + 1;
-            List<uint> needSeq = new List<uint>();
-            needSeq.Add(desiredSeq);
+            List<uint> needSeq = [desiredSeq];
             uint bottom = desiredSeq + 1;
             if (rcvdSeq < bottom || rcvdSeq - bottom > CryptoSystem.MaximumEffortLevel)
             {
+                log.Warn($"[{session.LoggingIdentifier}] Session for {session.Player?.Name ?? "Unknown Player"} terminated for AbnormalSequenceReceived in DoRequestForRetransmission. rcvdSeq: {rcvdSeq}, bottom: {bottom}, diff: {(rcvdSeq >= bottom ? (rcvdSeq - bottom).ToString() : "negative")}, MaximumEffortLevel: {CryptoSystem.MaximumEffortLevel}");
                 session.Terminate(SessionTerminationReason.AbnormalSequenceReceived);
                 return;
             }
@@ -667,11 +668,11 @@ namespace ACE.Server.Network
             // If this session is attached to a player log them off to avoid retransmit floods
             if (session.Player != null)
             {
-                ForceLogOff($"NetworkSession error: client and server are out of sync", $"{session.Player.Name} - disconnected to prevent retransmit flood");
+                ForceLogOff($"NetworkSession error: client and server are out of sync", $"{session.Player.Name} - disconnected to prevent retransmit flood (Requested sequence: {sequence})");
             }
             else
             {
-                log.Error($"Session {session.Network?.ClientId}\\{session.EndPoint} ({session.Account}) - disconnected to prevent retransmit flood.");
+                log.Error($"Session {session.Network?.ClientId}\\{session.EndPoint} ({session.Account}) - disconnected to prevent retransmit flood (Requested sequence: {sequence}).");
                 session.Terminate(SessionTerminationReason.AbnormalSequenceReceived);
             }
 
