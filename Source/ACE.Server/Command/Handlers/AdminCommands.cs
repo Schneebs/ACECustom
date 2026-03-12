@@ -1902,7 +1902,7 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
-            if (targetPlayer.UCMChecker.IsChecking)
+            if (targetPlayer.UCMChecker.IsCheckInProgress())
             {
                 session.Network.EnqueueSend(new GameMessageSystemChat($"{targetPlayer.Name} is already undergoing a UCM check.", ChatMessageType.System));
                 return;
@@ -4402,7 +4402,7 @@ namespace ACE.Server.Command.Handlers
             {
                 var objectId = new ObjectGuid((uint)session.Player.CurrentAppraisalTarget);
                 var wo = session.Player.CurrentLandblock?.GetObject(objectId);
-                if (wo is Lock @lock)
+                if (wo is WorldObjects.Lock @lock)
                 {
                     var opening = openIt ? $" Opening {wo.WeenieType}." : "";
                     string lockCode = LockHelper.GetLockCode(wo);
