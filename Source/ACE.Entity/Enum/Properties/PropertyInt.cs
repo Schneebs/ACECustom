@@ -715,6 +715,11 @@ namespace ACE.Entity.Enum.Properties
         [AssessmentProperty]
         PrestigeLevel = 9043, // distinct from FailedShinyCaptureWCID (9041)
 
+        /// <summary>Server-only: lifetime times this character was sent to jail (admin /jail or failed focus check).</summary>
+        TimesJailed = 9044,
+        /// <summary>Server-only: times this character passed a focus/UCM check (world or admin-initiated).</summary>
+        TimesUcmCheckPassed = 9045,
+
         // Portal
         PortalUseCount                          = 9040, // Number of times a portal may be used before destroying itself
 

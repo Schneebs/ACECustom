@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, LogOut, Award, Star, Info, Activity, Package, ScrollText } from 'lucide-react'
+import { ChevronLeft, LogOut, Award, Star, Info, Activity, Package, ScrollText, Skull } from 'lucide-react'
 import { api } from '../services/api'
 import { Character } from '../types'
 import CharacterStats from './character/CharacterStats'
 import CharacterSkills from './character/CharacterSkills'
 import CharacterInventory from './character/CharacterInventory'
 import CharacterStamps from './character/CharacterStamps'
+import CharacterStatus from './character/CharacterStatus'
 import Modal from './common/Modal'
 import TabButton from './common/TabButton'
 
@@ -19,7 +20,7 @@ export default function CharacterDetail() {
   const guid = parseInt(guidParam || '0')
   
   const [detail, setDetail] = useState<CharacterDetailData | null>(null)
-  const VALID_TABS = ['general', 'skills', 'inventory', 'stamps']
+  const VALID_TABS = ['general', 'skills', 'inventory', 'stamps', 'status']
   const [activeTab, setActiveTab] = useState(tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'general')
   const [isLoading, setIsLoading] = useState(true)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -227,6 +228,12 @@ export default function CharacterDetail() {
               onClick={() => handleTabChange('stamps')} 
               icon={<ScrollText className="w-3.5 h-3.5 text-neutral-400" />} 
             />
+            <TabButton 
+              label="Status" 
+              active={activeTab === 'status'} 
+              onClick={() => handleTabChange('status')} 
+              icon={<Skull className="w-3.5 h-3.5 text-red-400/70" />} 
+            />
           </div>
         </div>
       </div>
@@ -238,6 +245,7 @@ export default function CharacterDetail() {
           {activeTab === 'skills' && <CharacterSkills guid={guid} />}
           {activeTab === 'inventory' && <CharacterInventory guid={guid} />}
           {activeTab === 'stamps' && <CharacterStamps guid={guid} />}
+          {activeTab === 'status' && <CharacterStatus guid={guid} isAdmin={detail.isAdmin} />}
         </div>
       </div>
     </div>

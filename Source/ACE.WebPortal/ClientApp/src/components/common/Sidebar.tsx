@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { User, Users, Globe, Search, Book, FileCode, Terminal, Settings, LogOut } from 'lucide-react';
+import { User, Users, Globe, Search, Book, FileCode, Terminal, Settings, LogOut, Trophy } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { getRoleName } from '../../utils/auth';
 import { cn } from '../../utils/cn';
@@ -21,6 +21,7 @@ const Sidebar: React.FC = () => {
       
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
         <SidebarItem to="/characters" icon={<User className="w-4 h-4" />} label="Characters" />
+        <SidebarItem to="/leaderboards" icon={<Trophy className="w-4 h-4" />} label="Leaderboards" />
 
         <div className="h-px bg-neutral-800/50 my-6 mx-2" />
 
