@@ -602,7 +602,10 @@ namespace ACE.Server.Entity
                     results.Add((entry.AccountId, mainCharacter, entry.Count));
                 }
 
-                return results;
+                // Keep this leaderboard player-facing: exclude staff/admin characters (commonly prefixed with '+').
+                return results
+                    .Where(r => string.IsNullOrEmpty(r.CharacterName) || !r.CharacterName.StartsWith("+"))
+                    .ToList();
             }
         }
 
@@ -638,7 +641,9 @@ namespace ACE.Server.Entity
                     results.Add((entry.AccountId, mainCharacter, entry.Count));
                 }
 
-                return results;
+                return results
+                    .Where(r => string.IsNullOrEmpty(r.CharacterName) || !r.CharacterName.StartsWith("+"))
+                    .ToList();
             }
         }
     }
