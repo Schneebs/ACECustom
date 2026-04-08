@@ -13,13 +13,13 @@ namespace ACE.Database.Models.Auth;
 public static class LeaderboardInlineSql
 {
     private const ushort ExcludeFromLeaderboardsBoolType = (ushort)PropertyBool.ExcludeFromLeaderboards;
-    private const string NonAdminAccountJoin = "INNER JOIN account a ON a.id = c.account_Id AND a.accessLevel = 0";
+    private const string NonAdminAccountJoin = "INNER JOIN account a ON a.accountId = c.account_Id AND a.accessLevel = 0";
 
     /// <summary>Output columns must match Leaderboard + AuthDbContext: Score, Account, Character, LeaderboardID.</summary>
     public const string TopLum = """
         SELECT i.value AS Score, c.account_Id AS Account, c.name AS `Character`, c.id AS LeaderboardID
         FROM ace_shard.character c
-        INNER JOIN account a ON a.id = c.account_Id AND a.accessLevel = 0
+        INNER JOIN account a ON a.accountId = c.account_Id AND a.accessLevel = 0
         INNER JOIN ace_shard.biota_properties_int64 i ON i.object_id = c.id AND i.type = 9005
         LEFT JOIN ace_shard.biota_properties_bool b ON b.object_id = c.id AND b.type = 9011
         WHERE c.is_Deleted = 0 AND (b.value IS NULL OR b.value = 0)
@@ -30,7 +30,7 @@ public static class LeaderboardInlineSql
     public const string TopBank = """
         SELECT i.value AS Score, c.account_Id AS Account, c.name AS `Character`, c.id AS LeaderboardID
         FROM ace_shard.character c
-        INNER JOIN account a ON a.id = c.account_Id AND a.accessLevel = 0
+        INNER JOIN account a ON a.accountId = c.account_Id AND a.accessLevel = 0
         INNER JOIN ace_shard.biota_properties_int64 i ON i.object_id = c.id AND i.type = 9004
         LEFT JOIN ace_shard.biota_properties_bool b ON b.object_id = c.id AND b.type = 9011
         WHERE c.is_Deleted = 0 AND (b.value IS NULL OR b.value = 0)
@@ -41,7 +41,7 @@ public static class LeaderboardInlineSql
     public const string TopLevel = """
         SELECT i.value AS Score, c.account_Id AS Account, c.name AS `Character`, c.id AS LeaderboardID
         FROM ace_shard.character c
-        INNER JOIN account a ON a.id = c.account_Id AND a.accessLevel = 0
+        INNER JOIN account a ON a.accountId = c.account_Id AND a.accessLevel = 0
         INNER JOIN ace_shard.biota_properties_int i ON i.object_id = c.id AND i.type = 25
         LEFT JOIN ace_shard.biota_properties_bool b ON b.object_id = c.id AND b.type = 9011
         WHERE c.is_Deleted = 0 AND (b.value IS NULL OR b.value = 0)
@@ -52,7 +52,7 @@ public static class LeaderboardInlineSql
     public const string TopEnlightenment = """
         SELECT i.value AS Score, c.account_Id AS Account, c.name AS `Character`, c.id AS LeaderboardID
         FROM ace_shard.character c
-        INNER JOIN account a ON a.id = c.account_Id AND a.accessLevel = 0
+        INNER JOIN account a ON a.accountId = c.account_Id AND a.accessLevel = 0
         INNER JOIN ace_shard.biota_properties_int i ON i.object_id = c.id AND i.type = 390
         LEFT JOIN ace_shard.biota_properties_bool b ON b.object_id = c.id AND b.type = 9011
         WHERE c.is_Deleted = 0 AND (b.value IS NULL OR b.value = 0)
@@ -63,7 +63,7 @@ public static class LeaderboardInlineSql
     public const string TopTitles = """
         SELECT i.value AS Score, c.account_Id AS Account, c.name AS `Character`, c.id AS LeaderboardID
         FROM ace_shard.character c
-        INNER JOIN account a ON a.id = c.account_Id AND a.accessLevel = 0
+        INNER JOIN account a ON a.accountId = c.account_Id AND a.accessLevel = 0
         INNER JOIN ace_shard.biota_properties_int i ON i.object_id = c.id AND i.type = 262
         LEFT JOIN ace_shard.biota_properties_bool b ON b.object_id = c.id AND b.type = 9011
         WHERE c.is_Deleted = 0 AND (b.value IS NULL OR b.value = 0)
@@ -74,7 +74,7 @@ public static class LeaderboardInlineSql
     public const string TopDeaths = """
         SELECT i.value AS Score, c.account_Id AS Account, c.name AS `Character`, c.id AS LeaderboardID
         FROM ace_shard.character c
-        INNER JOIN account a ON a.id = c.account_Id AND a.accessLevel = 0
+        INNER JOIN account a ON a.accountId = c.account_Id AND a.accessLevel = 0
         INNER JOIN ace_shard.biota_properties_int i ON i.object_id = c.id AND i.type = 43
         LEFT JOIN ace_shard.biota_properties_bool b ON b.object_id = c.id AND b.type = 9011
         WHERE c.is_Deleted = 0 AND (b.value IS NULL OR b.value = 0)
@@ -91,7 +91,7 @@ public static class LeaderboardInlineSql
                 ORDER BY c.total_Logins DESC LIMIT 1) AS `Character`,
                a.accountId AS LeaderboardID
         FROM account_quest a
-        INNER JOIN account acc ON acc.id = a.accountId AND acc.accessLevel = 0
+        INNER JOIN account acc ON acc.accountId = a.accountId AND acc.accessLevel = 0
         GROUP BY a.accountId
         HAVING `Character` IS NOT NULL
         AND NOT EXISTS (
@@ -120,7 +120,7 @@ public static class LeaderboardInlineSql
         c.name AS `Character`,
         c.id AS LeaderboardID
         FROM ace_shard.character c
-        INNER JOIN account a ON a.id = c.account_Id AND a.accessLevel = 0
+        INNER JOIN account a ON a.accountId = c.account_Id AND a.accessLevel = 0
         LEFT JOIN ace_shard.biota_properties_bool b ON b.object_id = c.id AND b.type = 9011
         WHERE c.is_Deleted = 0 AND (b.value IS NULL OR b.value = 0)
         HAVING Score > 0
@@ -166,7 +166,7 @@ public static class LeaderboardInlineSql
         c.name AS `Character`,
         c.id AS LeaderboardID
         FROM ace_shard.character c
-        INNER JOIN account a ON a.id = c.account_Id AND a.accessLevel = 0
+        INNER JOIN account a ON a.accountId = c.account_Id AND a.accessLevel = 0
         LEFT JOIN ace_shard.biota_properties_bool b ON b.object_id = c.id AND b.type = 9011
         WHERE c.is_Deleted = 0 AND (b.value IS NULL OR b.value = 0)
         HAVING Score > 0
