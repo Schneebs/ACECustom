@@ -264,7 +264,7 @@ namespace ACE.Server.Controllers
             if (!IsAuthorizedForCharacter(guid, out var player))
                 return Unauthorized();
 
-            var snapshot = GetBiotaSnapshot(player);
+            var snapshot = RetrieveBiota(player);
             return Ok(CharacterPortalStatusHelper.BuildStatusJson(guid, snapshot));
         }
 
