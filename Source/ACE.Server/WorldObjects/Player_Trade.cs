@@ -107,9 +107,9 @@ namespace ACE.Server.WorldObjects
                 ItemsInTradeWindow.Clear();
                 tradePartner.ItemsInTradeWindow.Clear();
 
-                // Must match the initiator's RegisterTrade pair (initiatorGuid, partnerGuid). Stock ACE duplicated
-                // tradePartner.Guid here; clients can reject the trade and immediately send CloseTradeNegotiations.
-                Session.Network.EnqueueSend(new GameEventRegisterTrade(Session, tradePartner.Guid, Guid));
+                // Legacy/stock client behavior: non-initiator receives the initiator GUID twice. Sending
+                // (initiator, self) here broke the left trade header for recipients after prestige-related changes.
+                Session.Network.EnqueueSend(new GameEventRegisterTrade(Session, tradePartner.Guid, tradePartner.Guid));
             }
         }
 
