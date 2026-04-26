@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 
 namespace ACE.Entity.Enum.Properties
@@ -738,6 +738,10 @@ namespace ACE.Entity.Enum.Properties
         TimesJailed                             = 9044,
         /// <summary>Server/admin: UCM checks passed count (leaderboard stat).</summary>
         TimesUcmCheckPassed                     = 9045,
+        /// <summary>
+        /// Custom targeting behavior flags (<see cref="ACE.Entity.Enum.CustomTargetingBehavior"/>).
+        /// </summary>
+        TargetingFlags                          = 9046,
     }
 
     public static class PropertyIntExtensions
@@ -889,6 +893,9 @@ namespace ACE.Entity.Enum.Properties
                 case PropertyInt.HookGroup:
                     return System.Enum.GetName(typeof(HookGroupType), value);
 
+                case PropertyInt.TargetingFlags:
+                    return ((ACE.Entity.Enum.CustomTargetingBehavior)value).ToString();
+
                 //case PropertyInt.TypeOfAlteration:
                 //    return System.Enum.GetName(typeof(SkillAlterationType), value);
             }
@@ -897,3 +904,5 @@ namespace ACE.Entity.Enum.Properties
         }
     }
 }
+
+

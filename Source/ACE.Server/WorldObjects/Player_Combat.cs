@@ -901,7 +901,19 @@ namespace ACE.Server.WorldObjects
 
         public override bool CanDamage(Creature target)
         {
-            return target.Attackable && !target.Teleporting && !(target is CombatPet);
+            if (target == null)
+                return false;
+
+            if (target is Player player && player.CloakStatus == CloakStatus.Creature)
+                return false;
+
+            if (!target.Attackable || target.Teleporting || target is CombatPet)
+                return false;
+
+            if (BlocksFriendlyPlayerDamage(target))
+                return false;
+
+            return true;
         }
 
         // http://acpedia.org/wiki/Announcements_-_2002/04_-_Betrayal
