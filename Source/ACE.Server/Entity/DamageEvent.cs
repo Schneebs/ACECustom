@@ -436,6 +436,10 @@ namespace ACE.Server.Entity
             if (Weapon != null && Weapon.HasImbuedEffect(ImbuedEffectType.IgnoreAllArmor))
                 ArmorMod = 1.0f;
 
+            var isVitalDrainDamage = DamageType == DamageType.Stamina || DamageType == DamageType.Mana;
+            if (isVitalDrainDamage)
+                ArmorMod = 1.0f;
+
             // get resistance modifiers
             WeaponResistanceMod = WorldObject.GetWeaponResistanceModifier(Weapon, attacker, attackSkill, DamageType);
 
@@ -468,6 +472,8 @@ namespace ACE.Server.Entity
 
             // get shield modifier
             ShieldMod = defender.GetShieldMod(attacker, DamageType, Weapon);
+            if (isVitalDrainDamage)
+                ShieldMod = 1.0f;
 
             // calculate final output damage
             Damage = DamageBeforeMitigation * ArmorMod * ShieldMod * ResistanceMod * DamageResistanceRatingMod;
