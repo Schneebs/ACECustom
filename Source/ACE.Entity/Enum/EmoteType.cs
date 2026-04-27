@@ -151,6 +151,7 @@ namespace ACE.Entity.Enum
         SetMyBoolStat                 = 142, //Custom - Sets self's PropertyBool stat
         SetMyIntStat                  = 143, //Custom - Sets self's PropertyInt stat
         SetMyInt64Stat                = 144, //Custom - Sets self's PropertyInt64 stat
+        SetMyStringStat               = 145, //Custom - Set self's PropertyString stat
         RegisterPetSkin               = 150, //Custom - Pet Registry registration
         InqPetRegistryCount           = 151, //Custom - Check pet registry count (uses min/max)
         InqPetRegistryCreatureType    = 152, //Custom - Check if account has any pet of creature type (uses stat field)
