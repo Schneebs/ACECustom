@@ -571,6 +571,39 @@ namespace ACE.Server.WorldObjects.Managers
         }
 
         /// <summary>
+        /// Like <see cref="StartCooldown"/> but with an explicit duration and caster guid (e.g. pet recall block on summoning device).
+        /// Replaces an existing cooldown enchantment with the same spell id and caster.
+        /// </summary>
+        public bool StartOrRefreshItemCooldown(uint casterItemGuid, int sharedCooldownId, float durationSeconds)
+        {
+            if (Player?.Session == null || durationSeconds <= 0)
+                return false;
+
+            var spellId = (int)GetCooldownSpellID(sharedCooldownId);
+            var existing = GetEnchantment((uint)spellId, casterItemGuid);
+            if (existing != null)
+                Remove(existing, sound: false);
+
+            var newEntry = new PropertiesEnchantmentRegistry
+            {
+                SpellId = spellId,
+                SpellCategory = (SpellCategory)SpellCategory_Cooldown,
+                HasSpellSetId = true,
+                Duration = durationSeconds,
+                CasterObjectId = casterItemGuid,
+                DegradeLimit = -666,
+                StatModType = EnchantmentTypeFlags.Cooldown,
+                EnchantmentCategory = (uint)EnchantmentMask.Cooldown,
+                LayerId = 1
+            };
+            WorldObject.Biota.PropertiesEnchantmentRegistry.AddEnchantment(newEntry, WorldObject.BiotaDatabaseLock);
+            WorldObject.ChangesDetected = true;
+
+            Player.Session.Network.EnqueueSend(new GameEventMagicUpdateEnchantment(Player.Session, new Enchantment(Player, newEntry)));
+            return true;
+        }
+
+        /// <summary>
         /// Removes a spell from the enchantment registry, and
         /// sends the relevant network messages for spell removal
         /// </summary>

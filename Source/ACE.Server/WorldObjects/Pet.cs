@@ -61,7 +61,7 @@ namespace ACE.Server.WorldObjects
             var playerRadius = player.PhysicsObj.GetPhysicsRadius();
             var petRadius = GetPetRadius();
 
-            var spawnDist = playerRadius + petRadius + MinDistance;
+            var spawnDist = playerRadius + petRadius + PetFollowMinDistance;
 
             if (IsPassivePet)
             {
@@ -94,8 +94,8 @@ namespace ACE.Server.WorldObjects
 
             player.CurrentActivePet = this;
 
-            if (IsPassivePet)
-                nextSlowTickTime = Time.GetUnixTime();
+            // Used by Pet.Tick / SlowTick for owner follow (passive pets and combat pets when idle-follow is enabled).
+            nextSlowTickTime = Time.GetUnixTime();
 
             return true;
         }
@@ -114,10 +114,14 @@ namespace ACE.Server.WorldObjects
             if (player.CurrentActivePet == null)
                 return true;
 
-            if (player.CurrentActivePet is CombatPet)
+            if (player.CurrentActivePet is CombatPet combatPetReplace)
             {
-                // possibly add the ability to stow combat pets with passive pet devices here?
-                player.SendTransientError($"{player.CurrentActivePet.Name} is already active");
+                // QoL: using a combat pet essence/device a second time should stow the active combat pet,
+                // similar to how passive pet devices behave on reuse.
+                if (CombatPet.TryDenyOwnerStowFromRecallBlock(player, combatPetReplace, "HandleCurrentActivePet_Replace"))
+                    return false;
+
+                player.CurrentActivePet.Destroy();
                 return false;
             }
 
@@ -139,14 +143,23 @@ namespace ACE.Server.WorldObjects
                 // using a passive pet device
                 // stow currently active passive/combat pet, as per retail
                 // spawning the new passive pet requires another double click
+                if (player.CurrentActivePet is CombatPet combatPetPassiveStow
+                    && CombatPet.TryDenyOwnerStowFromRecallBlock(player, combatPetPassiveStow, "HandleCurrentActivePet_Retail.passive_essence_stow"))
+                    return false;
+
                 player.CurrentActivePet.Destroy();
             }
             else
             {
                 // using a combat pet device
-                if (player.CurrentActivePet is CombatPet)
+                if (player.CurrentActivePet is CombatPet combatPetEssenceStow)
                 {
-                    player.SendTransientError($"{player.CurrentActivePet.Name} is already active");
+                    // QoL: using a combat pet essence/device a second time should stow the active combat pet,
+                    // similar to how passive pet devices behave on reuse.
+                    if (CombatPet.TryDenyOwnerStowFromRecallBlock(player, combatPetEssenceStow, "HandleCurrentActivePet_Retail.combat_essence_stow"))
+                        return false;
+
+                    player.CurrentActivePet.Destroy();
                 }
                 else
                 {
@@ -202,36 +215,63 @@ namespace ACE.Server.WorldObjects
 
             var dist = GetCylinderDistance(P_PetOwner);
 
-            if (dist > MaxDistance)
+            if (dist > PetFollowMaxDistance)
                 Destroy();
 
-            if (!IsMoving && dist > MinDistance)
-                StartFollow();
+            if (!IsMoving && dist > PetFollowMinDistance)
+            {
+                if (this is CombatPet combatPet && combatPet.IsOwnerFollowRecallBlocked())
+                {
+                    CombatPet.TraceRecallBlockStatic(combatPet, "SlowTick.skip_StartFollowPetOwner", $"dist={dist:F1}m (>{PetFollowMinDistance})");
+                    return;
+                }
+
+                StartFollowPetOwner();
+            }
         }
 
         // if the passive pet is between min-max distance to owner,
         // it will turn and start running torwards its owner
 
-        private static readonly float MinDistance = 2.0f;
-        private static readonly float MaxDistance = 192.0f;
+        protected const float PetFollowMinDistance = 2.0f;
+        protected const float PetFollowMaxDistance = 192.0f;
 
-        private void StartFollow()
+        /// <summary>
+        /// Client motion for following the owner. Passive pets always use this; combat pets use it for
+        /// idle follow so animation matches physics (monster MoveToObject uses different MotionParams and skids).
+        /// </summary>
+        private void BroadcastFollowOwnerMotion(WorldObject target)
         {
-            // similar to Monster_Navigation.StartTurn()
+            if (MoveSpeed == 0.0f)
+                GetMovementSpeed();
 
-            //Console.WriteLine($"{Name}.StartFollow()");
+            var motion = new Motion(this, target, MovementType.MoveToObject);
+
+            motion.MoveToParameters.MovementParameters |= MovementParams.CanCharge;
+            motion.MoveToParameters.DistanceToObject = PetFollowMinDistance;
+            motion.MoveToParameters.WalkRunThreshold = 0.0f;
+
+            motion.RunRate = RunRate;
+
+            CurrentMotionState = motion;
+
+            EnqueueBroadcastMotion(motion);
+        }
+
+        /// <summary>
+        /// Begin running toward <see cref="P_PetOwner"/> (shared by passive SlowTick and combat-pet idle follow).
+        /// </summary>
+        protected void StartFollowPetOwner()
+        {
+            //Console.WriteLine($"{Name}.StartFollowPetOwner()");
 
             IsMoving = true;
 
-            // broadcast to clients
-            MoveTo(P_PetOwner, RunRate);
+            BroadcastFollowOwnerMotion(P_PetOwner);
 
-            // perform movement on server
             var mvp = new MovementParameters();
-            mvp.DistanceToObject = MinDistance;
+            mvp.DistanceToObject = PetFollowMinDistance;
             mvp.WalkRunThreshold = 0.0f;
-
-            //mvp.UseFinalHeading = true;
 
             PhysicsObj.MoveToObject(P_PetOwner.PhysicsObj, mvp);
 
@@ -250,20 +290,7 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
-            if (MoveSpeed == 0.0f)
-                GetMovementSpeed();
-
-            var motion = new Motion(this, target, MovementType.MoveToObject);
-
-            motion.MoveToParameters.MovementParameters |= MovementParams.CanCharge;
-            motion.MoveToParameters.DistanceToObject = MinDistance;
-            motion.MoveToParameters.WalkRunThreshold = 0.0f;
-
-            motion.RunRate = RunRate;
-
-            CurrentMotionState = motion;
-
-            EnqueueBroadcastMotion(motion);
+            BroadcastFollowOwnerMotion(target);
         }
 
         /// <summary>

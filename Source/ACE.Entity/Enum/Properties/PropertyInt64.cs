@@ -52,5 +52,13 @@ namespace ACE.Entity.Enum.Properties
         LumAugMissileDefenseCount = 9025,
         LumAugMagicDefenseCount = 9026,
         BankedWeaklyEnlightenedCoins = 9027,
+
+        // Pet Bonding System (Combat Pet Devices)
+        /// <summary>Current bond XP stored on a PetDevice.</summary>
+        PetBondXp              = 9050,
+        /// <summary>Total lifetime bond XP stored on a PetDevice (optional; for stats/debug).</summary>
+        PetBondXpTotal         = 9051,
+        /// <summary>Character ID the PetDevice is attuned/bonded to (stable DB character id).</summary>
+        PetBondAttunedCharacterId = 9052,
     }
 }

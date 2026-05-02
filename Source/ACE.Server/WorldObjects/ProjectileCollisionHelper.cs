@@ -114,6 +114,9 @@ namespace ACE.Server.WorldObjects
                         {
                             targetCreature.TakeDamage(sourceCreature, damageEvent.DamageType, damageEvent.Damage);
 
+                            if (sourceCreature is CombatPet missilePet)
+                                CombatPet.TryNotifyOwnerOutgoingPhysical(missilePet, targetCreature, damageEvent.Damage, damageEvent.DamageType, "Missile");
+
                             // blood splatter?
 
                             // handle Dirty Fighting

@@ -6,9 +6,13 @@ using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
+using ACE.Common;
 using ACE.Server.Entity;
 using ACE.Server.Managers;
+using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects.Managers;
+
+using log4net;
 
 namespace ACE.Server.WorldObjects
 {
@@ -17,6 +21,57 @@ namespace ACE.Server.WorldObjects
     /// </summary>
     public partial class CombatPet : Pet
     {
+        private static readonly ILog RecallBlockDbgLog = LogManager.GetLogger(typeof(CombatPet));
+
+        private WeakReference<PetDevice> _summoningDevice;
+        private ObjectGuid _summoningDeviceGuid = ObjectGuid.Invalid;
+
+        /// <summary>
+        /// The PetDevice that summoned this CombatPet (best-effort, in-memory).
+        /// </summary>
+        public PetDevice TryGetSummoningDevice()
+        {
+            if (_summoningDevice == null)
+                return null;
+
+            _summoningDevice.TryGetTarget(out var device);
+            return device;
+        }
+
+        /// <summary>
+        /// The GUID of the PetDevice that summoned this CombatPet.
+        /// </summary>
+        public ObjectGuid SummoningDeviceGuid => _summoningDeviceGuid;
+
+        /// <summary>
+        /// Multiplier applied to harmful spell projectile damage (after normal resists/absorb).
+        /// Uses <see cref="LuminanceAugmentSummonCount"/> (copied from owner at summon) with diminishing returns; asymptotic cap from ServerConfig.
+        /// </summary>
+        public float GetSpellProjectileDamageTakenMultiplier()
+        {
+            if (!ServerConfig.pet_combat_summon_aug_spell_mitigation_enabled.Value)
+                return 1.0f;
+
+            var maxRed = (float)ServerConfig.pet_combat_summon_aug_spell_mitigation_max.Value;
+            if (maxRed <= 0)
+                return 1.0f;
+
+            maxRed = Math.Clamp(maxRed, 0f, 0.999f);
+
+            var scale = ServerConfig.pet_combat_summon_aug_spell_mitigation_scale.Value;
+            if (scale <= 0)
+                return 1.0f;
+
+            var aug = LuminanceAugmentSummonCount ?? 0;
+            if (aug <= 0)
+                return 1.0f;
+
+            // Diminishing returns: fraction of cap reached -> 1 - exp(-aug/scale); never exceeds maxRed.
+            var towardCap = 1.0 - Math.Exp(-aug / scale);
+            var reduction = maxRed * towardCap;
+            return (float)(1.0 - reduction);
+        }
+
         // Store augmentation bonuses directly (not as enchantments)
         private float _itemAugAttackMod = 0f;
         private float _itemAugDefenseMod = 0f;
@@ -30,6 +85,9 @@ namespace ACE.Server.WorldObjects
         // Track where we applied imbued effects so we can remove them on resummon
         private WorldObject _previousImbuedTarget = null;
         private ImbuedEffectType _previousImbuedEffects = ImbuedEffectType.Undef;
+
+        /// <summary>Unix time until which owner leash / idle follow recall is suppressed (after taking damage).</summary>
+        private double _ownerFollowRecallBlockedUntilUnix;
 
         // Public getters for debug command
         public float ItemAugAttackMod => _itemAugAttackMod;
@@ -65,7 +123,17 @@ namespace ACE.Server.WorldObjects
 
         private void SetEphemeralValues()
         {
+            _meleeMotionDpsFactor = 1f;
+            RadarBehavior = ACE.Entity.Enum.RadarBehavior.ShowAlways;
         }
+
+        /// <summary>
+        /// Per-hit melee damage multiplier so expected melee DPS matches the summon weenie baseline
+        /// (accounts for motion-table swing length and attack-frame count). See <see cref="ConfigureMeleeMotionDpsNormalization"/>.
+        /// </summary>
+        private float _meleeMotionDpsFactor = 1f;
+
+        internal float MeleeMotionDpsFactor => _meleeMotionDpsFactor;
 
         public override void Destroy(bool raiseNotifyOfDestructionEvent = true, bool fromLandblockUnload = false)
         {
@@ -83,10 +151,20 @@ namespace ACE.Server.WorldObjects
 
         public override bool? Init(Player player, PetDevice petDevice)
         {
+            // Before Pet.Init -> EnterWorld: weenie defaults are creature/gold on radar; clients never get a later blip update unless we set this now so the create packet includes RadarBlipColor.
+            this.RadarColor = ACE.Entity.Enum.RadarColor.Pink;
+
             var success = base.Init(player, petDevice);
 
             if (success == null || !success.Value)
                 return success;
+
+            // Track which PetDevice summoned this CombatPet for bond XP attribution.
+            if (petDevice != null)
+            {
+                _summoningDeviceGuid = petDevice.Guid;
+                _summoningDevice = new WeakReference<PetDevice>(petDevice);
+            }
 
             // Clear cached augmentation and gem imbue state between summons
             // This prevents old values from persisting when resummoning with different augs/gems
@@ -109,34 +187,59 @@ namespace ACE.Server.WorldObjects
             MonsterState = State.Awake;
             IsAwake = true;
 
-            // copy ratings from pet device
+            var bondMaxHealthBonus = 0;
+
+            // Copy ratings from the summoning essence (Gear* on PetDevice). Only overwrite each combat rating when
+            // that Gear* is present; assigning null would RemoveProperty and wipe the creature weenie defaults.
             if (petDevice != null)
             {
-                DamageRating = petDevice.GearDamage;
-                DamageResistRating = petDevice.GearDamageResist;
-                CritDamageRating = petDevice.GearCritDamage;
-                CritDamageResistRating = petDevice.GearCritDamageResist;
-                CritRating = petDevice.GearCrit;
-                CritResistRating = petDevice.GearCritResist;
+                if (petDevice.GearDamage.HasValue)
+                    DamageRating = petDevice.GearDamage;
+                if (petDevice.GearDamageResist.HasValue)
+                    DamageResistRating = petDevice.GearDamageResist;
+                if (petDevice.GearCritDamage.HasValue)
+                    CritDamageRating = petDevice.GearCritDamage;
+                if (petDevice.GearCritDamageResist.HasValue)
+                    CritDamageResistRating = petDevice.GearCritDamageResist;
+                if (petDevice.GearCrit.HasValue)
+                    CritRating = petDevice.GearCrit;
+                if (petDevice.GearCritResist.HasValue)
+                    CritResistRating = petDevice.GearCritResist;
+
+                if (ServerConfig.pet_bond_enabled.Value && petDevice.IsCombatPetDevice() && petDevice.IsPetBondAttuned)
+                {
+                    var cap = (int)ServerConfig.pet_bond_level_cap.Value;
+                    if (cap < 1)
+                        cap = 1;
+
+                    var bondLevel = petDevice.PetBondLevel ?? 0;
+                    if (bondLevel < 0)
+                        bondLevel = 0;
+                    if (bondLevel > cap)
+                        bondLevel = cap;
+
+                    PetDevice.GetBondCombatStatBonuses(bondLevel, cap, out var bondDr, out var bondCdr, out var bondD, out var bondCd, out bondMaxHealthBonus);
+
+                    DamageResistRating = (DamageResistRating ?? 0) + bondDr;
+                    CritDamageResistRating = (CritDamageResistRating ?? 0) + bondCdr;
+                    DamageRating = (DamageRating ?? 0) + bondD;
+                    CritDamageRating = (CritDamageRating ?? 0) + bondCd;
+                }
             }
 
-            // copy all augmentation counts from player (for damage scaling)
-            // NOTE: Combat pets should NOT benefit from any luminance augmentations
-            // (melee/missile/war/void/item/life) until the player has at least 1
-            // Summoning luminance augmentation.
+            // copy augmentation counts from player (for damage scaling)
+            // Each non-summon track is capped by summoning aug count: effective = min(summon, owner track).
+            // With 0 summoning augs, all of these stay 0.
             var summonAugCount = (long)(player.LuminanceAugmentSummonCount ?? 0);
-            var hasSummonAug = summonAugCount > 0;
 
             LuminanceAugmentSummonCount = summonAugCount;
 
-            // Only propagate other luminance augmentation counts if the player has
-            // at least 1 Summoning augmentation. Otherwise, keep them at 0 on the pet.
-            LuminanceAugmentMeleeCount = hasSummonAug ? player.LuminanceAugmentMeleeCount : 0;
-            LuminanceAugmentMissileCount = hasSummonAug ? player.LuminanceAugmentMissileCount : 0;
-            LuminanceAugmentWarCount = hasSummonAug ? player.LuminanceAugmentWarCount : 0;
-            LuminanceAugmentVoidCount = hasSummonAug ? player.LuminanceAugmentVoidCount : 0;
+            LuminanceAugmentMeleeCount = Math.Min(summonAugCount, player.LuminanceAugmentMeleeCount ?? 0);
+            LuminanceAugmentMissileCount = Math.Min(summonAugCount, player.LuminanceAugmentMissileCount ?? 0);
+            LuminanceAugmentWarCount = Math.Min(summonAugCount, player.LuminanceAugmentWarCount ?? 0);
+            LuminanceAugmentVoidCount = Math.Min(summonAugCount, player.LuminanceAugmentVoidCount ?? 0);
 
-            // Apply summoning augmentation bonuses: +1 to all attributes and +1 to all skills per augmentation level
+            // Apply summoning augmentation bonuses: +1 to all attributes and +1 to all skills per summoning augmentation level
             var augCount = (int)summonAugCount;
             if (augCount > 0)
             {
@@ -169,13 +272,13 @@ namespace ACE.Server.WorldObjects
                 }
             }
 
-            // Store item augmentation bonuses directly (not as enchantments)
-            // These only apply if the player has at least 1 Summoning augmentation.
+            // Store item augmentation bonuses directly (not as enchantments), capped by summoning aug count.
             var itemAugCount = (long)(player.LuminanceAugmentItemCount ?? 0);
-            if (hasSummonAug && itemAugCount > 0)
+            var itemAugEffective = Math.Min(summonAugCount, itemAugCount);
+            if (itemAugEffective > 0)
             {
                 // Calculate weapon attack/defense mod: +0.20 base + (I × scaling factor)
-                var itemAugPercentage = GetItemAugPercentageRating(itemAugCount);
+                var itemAugPercentage = GetItemAugPercentageRating(itemAugEffective);
                 _itemAugAttackMod = 0.20f + itemAugPercentage;
                 _itemAugDefenseMod = 0.20f + itemAugPercentage;
 
@@ -186,17 +289,17 @@ namespace ACE.Server.WorldObjects
                 // At level 1 item aug: +200 base, then scaling on top
                 _itemAugArmorBonus = 200 + (int)(200.0f * itemAugPercentage);
             }
-            // Note: If itemAugCount is 0, _itemAug* fields remain at 0 (already reset above)
+            // Note: If itemAugEffective is 0, _itemAug* fields remain at 0 (already reset above)
 
-            // Store life augmentation protection rating directly (not as enchantments)
-            // This only applies if the player has at least 1 Summoning augmentation.
+            // Store life augmentation protection rating directly (not as enchantments), capped by summoning aug count.
             var lifeAugCount = (long)(player.LuminanceAugmentLifeCount ?? 0);
-            if (hasSummonAug && lifeAugCount > 0)
+            var lifeAugEffective = Math.Min(summonAugCount, lifeAugCount);
+            if (lifeAugEffective > 0)
             {
                 // Calculate protection rating using diminishing returns formula
-                _lifeAugProtectionRating = GetLifeAugProtectRating(lifeAugCount);
+                _lifeAugProtectionRating = GetLifeAugProtectRating(lifeAugEffective);
             }
-            // Note: If lifeAugCount is 0, _lifeAugProtectionRating remains at 0 (already reset above)
+            // Note: If lifeAugEffective is 0, _lifeAugProtectionRating remains at 0 (already reset above)
 
             // Apply all imbued effects from PetDevice (gem) to the summon's weapon or body
             // This includes armor rending and all damage-type rending (slash, pierce, bludgeon, fire, cold, acid, electric, nether)
@@ -227,13 +330,54 @@ namespace ACE.Server.WorldObjects
                 // Note: If filteredImbuedEffects is Undef, _gemImbuedEffects remains Undef (already reset above)
             }
 
+            if (petDevice != null && ServerConfig.pet_apply_capture_source_damage_type.Value)
+            {
+                var capDt = petDevice.GetProperty(PropertyInt.CapturedSourceDamageType);
+                if (capDt.HasValue && capDt.Value != 0 && Enum.IsDefined(typeof(DamageType), capDt.Value))
+                {
+                    var dt = (DamageType)capDt.Value;
+                    var meleeWeapon = GetEquippedMeleeWeapon();
+                    if (meleeWeapon != null)
+                        meleeWeapon.SetProperty(PropertyInt.DamageType, (int)dt);
+                    else
+                        SetProperty(PropertyInt.DamageType, (int)dt);
+                }
+            }
+
             // are CombatPets supposed to attack monsters that are in the same faction as the pet owner?
             // if not, there are a couple of different approaches to this
             // the easiest way for the code would be to simply set Faction1Bits for the CombatPet to match the pet owner's
             // however, retail pcaps did not contain Faction1Bits for CombatPets
 
+            ConfigureMeleeMotionDpsNormalization();
+
             // doing this the easiest way for the code here, and just removing during appraisal
             Faction1Bits = player.Faction1Bits;
+
+            if (bondMaxHealthBonus > 0)
+                Health.StartingValue = (uint)Math.Min(uint.MaxValue, (ulong)Health.StartingValue + (uint)bondMaxHealthBonus);
+
+            if (ServerConfig.pet_combat_unlimited_lifespan.Value)
+                TimeToRot = -1;
+            else
+            {
+                var tr = TimeToRot;
+                var perAug = ServerConfig.pet_summon_lifespan_seconds_per_aug.Value;
+                var perDurationAug = ServerConfig.pet_combat_lifespan_seconds_per_duration_aug.Value;
+                var durationAugEffective = Math.Min(summonAugCount, player.LuminanceAugmentSpellDurationCount ?? 0);
+
+                if (tr.HasValue && tr.Value > 0)
+                {
+                    var extraSeconds = 0.0;
+                    if (summonAugCount > 0 && perAug > 0)
+                        extraSeconds += summonAugCount * perAug;
+                    if (durationAugEffective > 0 && perDurationAug > 0)
+                        extraSeconds += durationAugEffective * perDurationAug;
+
+                    if (extraSeconds > 0)
+                        TimeToRot = tr.Value + (int)Math.Round(extraSeconds);
+                }
+            }
 
             // Ensure pet spawns at full health
             Health.Current = Health.MaxValue;
@@ -241,6 +385,165 @@ namespace ACE.Server.WorldObjects
             Mana.Current = Mana.MaxValue;
 
             return true;
+        }
+
+        /// <summary>
+        /// When the combat pet deals physical damage (melee, cleave, or missile), arms the same recall/stow block as incoming damage.
+        /// When <see cref="ServerConfig.pet_combat_damage_debug_chat"/> is enabled, tells the owner the pet dealt that damage.
+        /// </summary>
+        internal static void TryNotifyOwnerOutgoingPhysical(CombatPet pet, WorldObject target, float damage, DamageType damageType, string channel)
+        {
+            if (pet != null)
+            {
+                var dealt = (uint)Math.Max(0, Math.Round(damage));
+                if (dealt > 0)
+                    pet.ApplyOwnerFollowRecallBlockFromDamage(dealt, $"OutgoingPhysical:{channel}");
+            }
+
+            if (!ServerConfig.pet_combat_damage_debug_chat.Value || pet == null) return;
+
+            var owner = pet.P_PetOwner;
+            if (owner?.Session == null) return;
+
+            var dmg = (uint)Math.Max(0, Math.Round(damage));
+            if (dmg == 0) return;
+
+            var tname = target?.Name ?? "?";
+            owner.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"[Pet] {pet.Name} {channel} hit {tname} for {dmg} ({damageType}).", ChatMessageType.System));
+        }
+
+        /// <summary>
+        /// When <see cref="ServerConfig.pet_combat_damage_debug_chat"/> is enabled, tells the owner the pet took damage from a spell projectile (health only).
+        /// </summary>
+        internal static void TryNotifyOwnerIncomingSpell(CombatPet pet, WorldObject source, DamageType damageType, uint damage, string spellName)
+        {
+            if (!ServerConfig.pet_combat_damage_debug_chat.Value || pet == null || damage == 0) return;
+
+            var owner = pet.P_PetOwner;
+            if (owner?.Session == null) return;
+
+            var src = source?.Name ?? "?";
+            var spell = string.IsNullOrEmpty(spellName) ? "?" : spellName;
+            owner.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"[Pet] {pet.Name} took {damage} {damageType} from {src} ({spell}).", ChatMessageType.System));
+        }
+
+        /// <summary>True while <see cref="ServerConfig.pet_combat_recall_block_after_damage_seconds"/> window is active after damage.</summary>
+        public bool IsOwnerFollowRecallBlocked()
+        {
+            var sec = ServerConfig.pet_combat_recall_block_after_damage_seconds.Value;
+            if (sec <= 0)
+                return false;
+
+            return Time.GetUnixTime() < _ownerFollowRecallBlockedUntilUnix;
+        }
+
+        /// <summary>Seconds left in the recall/stow block, or 0 if none.</summary>
+        public double GetRecallBlockRemainingSeconds()
+        {
+            var rem = _ownerFollowRecallBlockedUntilUnix - Time.GetUnixTime();
+            return rem > 0 ? rem : 0;
+        }
+
+        /// <summary>
+        /// Blocks stowing a combat pet by reusing its essence (or a passive essence that would dismiss it) while
+        /// <see cref="ServerConfig.pet_combat_recall_block_after_damage_seconds"/> is active. Idle follow / leash already consult <see cref="IsOwnerFollowRecallBlocked"/>.
+        /// </summary>
+        public static bool TryDenyOwnerStowFromRecallBlock(Player player, CombatPet pet, string debugTag)
+        {
+            if (player?.Session == null || pet == null || !pet.IsOwnerFollowRecallBlocked())
+                return false;
+
+            var rem = pet.GetRecallBlockRemainingSeconds();
+            var secShow = Math.Max(1, (int)Math.Ceiling(rem));
+            player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"Your pet was in combat recently; you cannot recall it for about {secShow} more second(s).",
+                ChatMessageType.System));
+            TraceRecallBlockStatic(pet, debugTag, $"essence_stow_denied remaining≈{rem:F1}s");
+            return true;
+        }
+
+        /// <summary>
+        /// Arms owner follow/leash recall suppression after combat pet HP loss or after the pet deals damage (same timer).
+        /// Call from <see cref="TakeDamage"/>, spell projectile hits on the pet, and <see cref="TryNotifyOwnerOutgoingPhysical"/>.
+        /// </summary>
+        public void ApplyOwnerFollowRecallBlockFromDamage(uint dealt, string sourceTag)
+        {
+            if (dealt == 0)
+                return;
+
+            var blockSec = ServerConfig.pet_combat_recall_block_after_damage_seconds.Value;
+            if (blockSec <= 0)
+            {
+                if (ServerConfig.pet_combat_recall_block_debug.Value)
+                    TraceRecallBlock(sourceTag, $"skipped_block_seconds_is_0 dealt={dealt}");
+                return;
+            }
+
+            var now = Time.GetUnixTime();
+            _ownerFollowRecallBlockedUntilUnix = now + blockSec;
+
+            if (ServerConfig.pet_combat_recall_block_debug.Value)
+                TraceRecallBlock(sourceTag, $"armed dealt={dealt} blockSec={blockSec} untilUnix={_ownerFollowRecallBlockedUntilUnix:F0} now={now:F0}");
+
+            TryRefreshRecallBlockSummoningDeviceCooldown((float)blockSec);
+        }
+
+        private void TryRefreshRecallBlockSummoningDeviceCooldown(float durationSec)
+        {
+            if (!ServerConfig.pet_combat_recall_block_device_cooldown_visual.Value || durationSec <= 0)
+                return;
+
+            var owner = P_PetOwner;
+            if (owner?.EnchantmentManager == null || SummoningDeviceGuid == ObjectGuid.Invalid)
+                return;
+
+            var device = owner.FindObject(SummoningDeviceGuid.Full, Player.SearchLocations.Everywhere) as PetDevice;
+            device ??= TryGetSummoningDevice();
+            if (device?.CooldownId == null)
+                return;
+
+            owner.EnchantmentManager.StartOrRefreshItemCooldown(device.Guid.Full, device.CooldownId.Value, durationSec);
+        }
+
+        internal static void TraceRecallBlockStatic(CombatPet pet, string stage, string detail)
+        {
+            if (pet == null || !ServerConfig.pet_combat_recall_block_debug.Value)
+                return;
+
+            pet.TraceRecallBlock(stage, detail);
+        }
+
+        private void TraceRecallBlock(string sourceTag, string detail)
+        {
+            if (!ServerConfig.pet_combat_recall_block_debug.Value)
+                return;
+
+            var msg =
+                $"[PetRecallBlock] {sourceTag}: pet={Name} (0x{Guid.Full:X8}) blockedUntil={_ownerFollowRecallBlockedUntilUnix:F0} now={Time.GetUnixTime():F0} isBlocked={IsOwnerFollowRecallBlocked()} cfgSec={ServerConfig.pet_combat_recall_block_after_damage_seconds.Value} | {detail}";
+            RecallBlockDbgLog.Info(msg);
+        }
+
+        public override uint TakeDamage(WorldObject source, DamageType damageType, float amount, bool crit = false)
+        {
+            var dealt = base.TakeDamage(source, damageType, amount, crit);
+
+            if (dealt > 0)
+                ApplyOwnerFollowRecallBlockFromDamage(dealt, "TakeDamage");
+
+            if (dealt > 0 && ServerConfig.pet_combat_damage_debug_chat.Value)
+            {
+                var owner = P_PetOwner;
+                if (owner?.Session != null)
+                {
+                    var src = source?.Name ?? "periodic effect";
+                    owner.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"[Pet] {Name} took {dealt} {damageType} from {src}.", ChatMessageType.System));
+                }
+            }
+
+            return dealt;
         }
 
         public override void HandleFindTarget()
@@ -256,6 +559,7 @@ namespace ACE.Server.WorldObjects
             var nearbyMonsters = GetNearbyMonsters();
             if (nearbyMonsters.Count == 0)
             {
+                AttackTarget = null;
                 //Console.WriteLine($"{Name}.FindNextTarget(): empty");
                 return false;
             }
@@ -265,6 +569,7 @@ namespace ACE.Server.WorldObjects
 
             if (nearest[0].Distance > VisualAwarenessRangeSq)
             {
+                AttackTarget = null;
                 //Console.WriteLine($"{Name}.FindNextTarget(): next object out-of-range (dist: {Math.Round(Math.Sqrt(nearest[0].Distance))})");
                 return false;
             }
@@ -368,6 +673,24 @@ namespace ACE.Server.WorldObjects
         }
 
         /// <summary>
+        /// Marks capture-skin weapons and clears their item damage fields for appraisal; see <see cref="PropertyBool.CombatPetCaptureSkinWeapon"/>.
+        /// </summary>
+        public static void StripVisualWeaponDamageStats(WorldObject item)
+        {
+            if (item == null)
+                return;
+
+            var t = item.ItemType;
+            if (t != ItemType.MeleeWeapon && t != ItemType.MissileWeapon)
+                return;
+
+            item.SetProperty(PropertyBool.CombatPetCaptureSkinWeapon, true);
+            item.SetProperty(PropertyInt.Damage, 0);
+            item.SetProperty(PropertyFloat.DamageVariance, 0.0);
+            item.SetProperty(PropertyFloat.DamageMod, 1.0f);
+        }
+
+        /// <summary>
         /// Override GetBaseDamage to ALWAYS apply item augmentation bonuses,
         /// regardless of whether the summon has a weapon or if the weapon is enchantable
         /// </summary>
@@ -378,19 +701,12 @@ namespace ACE.Server.WorldObjects
 
             BaseDamageMod baseDamageMod;
 
-            // use weapon damage for every attack?
             var weapon = GetEquippedMeleeWeapon();
-            if (weapon != null)
+            // Capture-skin weapons are cosmetic: use body-part damage like unarmed (do not use item weapon stats).
+            if (weapon != null && (weapon.GetProperty(PropertyBool.CombatPetCaptureSkinWeapon) ?? false))
             {
-                // Get weapon damage mod (may or may not include wielder enchantments depending on enchantability)
-                baseDamageMod = weapon.GetDamageMod(this);
-            }
-            else
-            {
-                // Body part damage
                 if (attackPart == null)
                 {
-                    // Fallback to default damage if attackPart is null
                     var baseDamage = new BaseDamage(0, 0.0f);
                     baseDamageMod = new BaseDamageMod(baseDamage);
                 }
@@ -398,7 +714,25 @@ namespace ACE.Server.WorldObjects
                 {
                     var maxDamage = attackPart.DVal;
                     var variance = attackPart.DVar;
-
+                    var baseDamage = new BaseDamage(maxDamage, variance);
+                    baseDamageMod = new BaseDamageMod(baseDamage);
+                }
+            }
+            else if (weapon != null)
+            {
+                baseDamageMod = weapon.GetDamageMod(this);
+            }
+            else
+            {
+                if (attackPart == null)
+                {
+                    var baseDamage = new BaseDamage(0, 0.0f);
+                    baseDamageMod = new BaseDamageMod(baseDamage);
+                }
+                else
+                {
+                    var maxDamage = attackPart.DVal;
+                    var variance = attackPart.DVar;
                     var baseDamage = new BaseDamage(maxDamage, variance);
                     baseDamageMod = new BaseDamageMod(baseDamage);
                 }
@@ -628,6 +962,34 @@ namespace ACE.Server.WorldObjects
                 }
             }
             return bonus;
+        }
+
+        protected override void Die(DamageHistoryInfo lastDamager, DamageHistoryInfo topDamager)
+        {
+            if (P_PetOwner?.Session != null)
+            {
+                P_PetOwner.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"[Pet] Your combat pet {Name} has died.",
+                    ChatMessageType.System));
+            }
+
+            // Match recall-block path: refresh-in-place so combat recall cooldown + death do not stack duplicate enchantments.
+            // Require Session: StartCooldown uses Session unconditionally; offline owner cannot receive cooldown packet anyway.
+            if (ServerConfig.pet_summon_cooldown_on_pet_death_only.Value && P_PetOwner != null && P_PetOwner.Session != null && SummoningDeviceGuid != ObjectGuid.Invalid)
+            {
+                var device = P_PetOwner.FindObject(SummoningDeviceGuid.Full, Player.SearchLocations.Everywhere) as PetDevice;
+                device ??= TryGetSummoningDevice();
+                if (device != null && device.CooldownId != null)
+                {
+                    var deathSeconds = (float)(device.CooldownDuration ?? 0);
+                    if (deathSeconds > 0)
+                        P_PetOwner.EnchantmentManager.StartOrRefreshItemCooldown(device.Guid.Full, device.CooldownId.Value, deathSeconds);
+                    else
+                        P_PetOwner.EnchantmentManager.StartCooldown(device);
+                }
+            }
+
+            base.Die(lastDamager, topDamager);
         }
     }
 }

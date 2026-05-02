@@ -2775,6 +2775,10 @@ namespace ACE.Server.Command.Handlers
                         if (wo is Player) // I don't recall if @smite all would kill players in range, assuming it didn't
                             continue;
 
+                        // Player-owned combat pets are not "world trash"; exclude from area smite.
+                        if (wo is CombatPet)
+                            continue;
+
                         var useTakeDamage = ServerConfig.smite_uses_takedamage.Value;
 
                         if (wo is Creature creature && creature.Attackable)

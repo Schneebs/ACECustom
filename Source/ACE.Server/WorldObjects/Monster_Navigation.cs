@@ -579,6 +579,8 @@ namespace ACE.Server.WorldObjects
 
         public void CheckMissHome()
         {
+            if (this is CombatPet && ServerConfig.pet_combat_follow_owner_when_idle.Value)
+                return;
             if (Home == null) return;
             if (MonsterState == State.Return) return;
             var homeDistSq = Vector3.DistanceSquared(Home.ToGlobal(), Location.ToGlobal());

@@ -228,7 +228,7 @@ namespace ACE.Server.WorldObjects
 
         private TargetCategory GetTargetCategory(uint targetGuid, Spell spell, out WorldObject target)
         {
-            // fellowship spell
+            // fellowship spell (all fellowship targets)
             if ((spell.Flags & SpellFlags.FellowshipSpell) != 0)
             {
                 target = this;
@@ -326,6 +326,7 @@ namespace ACE.Server.WorldObjects
                 return;
 
             var spell = new Spell(spellId);
+
             if (spell.IsHarmful)
             {
                 LastCombatActionTime = DateTime.UtcNow;
@@ -439,7 +440,8 @@ namespace ACE.Server.WorldObjects
             var targetCreature = target as Creature;
 
             // ensure target is enchantable
-            if (!target.IsEnchantable) return true;
+            if (!target.IsEnchantable)
+                return true;
 
             // Self targeted spells should have a target of self
             if (spell.Flags.HasFlag(SpellFlags.SelfTargeted) && target != this)
@@ -456,7 +458,7 @@ namespace ACE.Server.WorldObjects
             // check item spells
             if (targetCreature == null && target.WielderId != null)
             {
-                var parent = CurrentLandblock.GetObject(target.WielderId.Value) as Player;
+                var parent = CurrentLandblock?.GetObject(target.WielderId.Value) as Player;
 
                 // Invalidate beneficial spells against monster wielded items
                 if (parent == null && spell.IsBeneficial)
@@ -1442,6 +1444,9 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public void SendChatMessage(WorldObject source, string msg, ChatMessageType msgType)
         {
+            if (Session == null)
+                return;
+
             if (!SquelchManager.Squelches.Contains(source, msgType))
                 Session.Network.EnqueueSend(new GameMessageSystemChat(msg, msgType));
         }

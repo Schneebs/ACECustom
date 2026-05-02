@@ -268,5 +268,9 @@ namespace ACE.Entity.Enum.Properties
         /// </summary>
         [AssessmentProperty]
         DamageCapMultiplier = 9045,
+        /// <summary>
+        /// Monster capture: ObjScale normalized to ~1.5m physical height for combat pet summons (parallel to CapturedScale at ~0.75m).
+        /// </summary>
+        CapturedScaleCombatPet = 9046,
     }
 }
