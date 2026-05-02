@@ -619,7 +619,15 @@ namespace ACE.Server.WorldObjects
                             break;
                     }
                     if (petApplied > 0)
-                        player.SendChatMessage(player, $"{overflowPet.Name} receives {petApplied} excess healing from {spell.Name}.", ChatMessageType.Magic);
+                    {
+                        var vitalLabel = spell.VitalDamageType switch
+                        {
+                            DamageType.Mana => "mana",
+                            DamageType.Stamina => "stamina",
+                            _ => "healing",
+                        };
+                        player.SendChatMessage(player, $"{overflowPet.Name} receives {petApplied} excess {vitalLabel} from {spell.Name}.", ChatMessageType.Magic);
+                    }
                 }
             }
 

@@ -540,6 +540,22 @@ namespace ACE.Server.WorldObjects.Managers
             return itemAugAmt;
         }
 
+        private static PropertiesEnchantmentRegistry CreateCooldownEnchantmentRegistry(int spellId, float durationSeconds, uint casterObjectId)
+        {
+            return new PropertiesEnchantmentRegistry
+            {
+                SpellId = spellId,
+                SpellCategory = (SpellCategory)SpellCategory_Cooldown,
+                HasSpellSetId = true,
+                Duration = durationSeconds,
+                CasterObjectId = casterObjectId,
+                DegradeLimit = -666,
+                StatModType = EnchantmentTypeFlags.Cooldown,
+                EnchantmentCategory = (uint)EnchantmentMask.Cooldown,
+                LayerId = 1      // cooldown at layer 1, any spells at layer 2?
+            };
+        }
+
         /// <summary>
         /// Adds a cooldown spell to the enchantment registry
         /// </summary>
@@ -549,19 +565,10 @@ namespace ACE.Server.WorldObjects.Managers
             if (cooldownID == null)
                 return false;
 
-            var newEntry = new PropertiesEnchantmentRegistry
-            {
-                // TODO: BiotaPropertiesEnchantmentRegistry.SpellId should be uint
-                SpellId = (int)GetCooldownSpellID(cooldownID.Value),
-                SpellCategory = (SpellCategory)SpellCategory_Cooldown,
-                HasSpellSetId = true,
-                Duration = item.CooldownDuration ?? 0.0f,
-                CasterObjectId = item.Guid.Full,
-                DegradeLimit = -666,
-                StatModType = EnchantmentTypeFlags.Cooldown,
-                EnchantmentCategory = (uint)EnchantmentMask.Cooldown,
-                LayerId = 1      // cooldown at layer 1, any spells at layer 2?
-            };
+            var newEntry = CreateCooldownEnchantmentRegistry(
+                (int)GetCooldownSpellID(cooldownID.Value),
+                (float)(item.CooldownDuration ?? 0.0),
+                item.Guid.Full);
             WorldObject.Biota.PropertiesEnchantmentRegistry.AddEnchantment(newEntry, WorldObject.BiotaDatabaseLock);
             WorldObject.ChangesDetected = true;
 
@@ -584,18 +591,7 @@ namespace ACE.Server.WorldObjects.Managers
             if (existing != null)
                 Remove(existing, sound: false);
 
-            var newEntry = new PropertiesEnchantmentRegistry
-            {
-                SpellId = spellId,
-                SpellCategory = (SpellCategory)SpellCategory_Cooldown,
-                HasSpellSetId = true,
-                Duration = durationSeconds,
-                CasterObjectId = casterItemGuid,
-                DegradeLimit = -666,
-                StatModType = EnchantmentTypeFlags.Cooldown,
-                EnchantmentCategory = (uint)EnchantmentMask.Cooldown,
-                LayerId = 1
-            };
+            var newEntry = CreateCooldownEnchantmentRegistry(spellId, durationSeconds, casterItemGuid);
             WorldObject.Biota.PropertiesEnchantmentRegistry.AddEnchantment(newEntry, WorldObject.BiotaDatabaseLock);
             WorldObject.ChangesDetected = true;
 

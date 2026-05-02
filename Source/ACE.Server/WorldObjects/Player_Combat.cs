@@ -901,9 +901,21 @@ namespace ACE.Server.WorldObjects
 
         public override bool CanDamage(Creature target)
         {
+            if (target == null)
+                return false;
+
+            if (target is Player player && player.CloakStatus == CloakStatus.Creature)
+                return false;
+
+            if (!target.Attackable || target.Teleporting)
+                return false;
+
             // Any summoned Pet (passive or CombatPet): players never deal weapon/missile/harm-spell damage to them.
-            // CombatPet was explicit before; passive pets could still be damageable if their weenie had Attackable — exclude all Pet.
-            return target.Attackable && !target.Teleporting && !(target is Pet);
+            // (Stock ACE often only excluded CombatPet; passive pets could still be damageable if Attackable.)
+            if (target is Pet)
+                return false;
+
+            return true;
         }
 
         // http://acpedia.org/wiki/Announcements_-_2002/04_-_Betrayal

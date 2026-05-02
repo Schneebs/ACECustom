@@ -180,7 +180,7 @@ namespace ACE.Server.WorldObjects
                 return false;
 
             var bondedCharacterId = PetBondAttunedCharacterId;
-            if (bondedCharacterId.HasValue && owner != null && bondedCharacterId.Value != owner.Character.Id)
+            if (bondedCharacterId.HasValue && owner != null && bondedCharacterId.Value != (long)owner.Character.Id)
                 return false;
 
             var levelCap = (int)ServerConfig.pet_bond_level_cap.Value;
@@ -460,7 +460,7 @@ namespace ACE.Server.WorldObjects
             if (ServerConfig.pet_bond_enabled.Value && IsCombatPetDevice() && IsPetBondAttuned)
             {
                 var bondedCharacterId = PetBondAttunedCharacterId;
-                if (bondedCharacterId.HasValue && bondedCharacterId.Value != player.Character.Id)
+                if (bondedCharacterId.HasValue && bondedCharacterId.Value != (long)player.Character.Id)
                 {
                     player.SendTransientError("This pet device is bonded to another character.");
                     return;

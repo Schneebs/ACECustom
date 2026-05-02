@@ -169,7 +169,11 @@ namespace ACE.Server.WorldObjects
             {
                 var rotateTarget = target;
                 if (rotateTarget.WielderId != null)
-                    rotateTarget = CurrentLandblock?.GetObject(rotateTarget.WielderId.Value);
+                {
+                    var wielded = CurrentLandblock?.GetObject(rotateTarget.WielderId.Value);
+                    if (wielded != null)
+                        rotateTarget = wielded;
+                }
 
                 var rotateTime = Rotate(rotateTarget);
                 var actionChain = new ActionChain();

@@ -579,7 +579,9 @@ namespace ACE.Server.WorldObjects
 
         public void CheckMissHome()
         {
-            if (this is CombatPet && ServerConfig.pet_combat_follow_owner_when_idle.Value)
+            // Idle combat pets use Pet.Tick / alternate follow; skip "miss home" only when not engaged (matches Monster_Tick idle-follow gate).
+            if (this is CombatPet && ServerConfig.pet_combat_follow_owner_when_idle.Value
+                && AttackTarget == null && MonsterState != State.Return)
                 return;
             if (Home == null) return;
             if (MonsterState == State.Return) return;

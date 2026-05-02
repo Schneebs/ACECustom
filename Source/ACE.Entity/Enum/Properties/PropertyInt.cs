@@ -743,6 +743,11 @@ namespace ACE.Entity.Enum.Properties
         PetBondLevel                            = 9046,
         /// <summary>DamageType copied from capture source for combat pet appearance/rules.</summary>
         CapturedSourceDamageType                = 9047,
+
+        /// <summary>
+        /// Custom targeting behavior flags (<see cref="ACE.Entity.Enum.CustomTargetingBehavior"/>).
+        /// </summary>
+        TargetingFlags                          = 9048,
     }
 
     public static class PropertyIntExtensions
@@ -784,6 +789,7 @@ namespace ACE.Entity.Enum.Properties
                     return System.Enum.GetName(typeof(CreatureType), value);
                 case PropertyInt.DamageType:
                 case PropertyInt.ResistanceModifierType:
+                case PropertyInt.CapturedSourceDamageType:
                     return System.Enum.GetName(typeof(DamageType), value);
                 case PropertyInt.CurrentWieldedLocation:
                 case PropertyInt.ValidLocations:

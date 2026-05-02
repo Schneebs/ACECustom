@@ -377,9 +377,7 @@ namespace ACE.Server.WorldObjects
             if ((CoinValue ?? 0) < amount)
                 return false;
 
-            if (amount > uint.MaxValue)
-                amount = uint.MaxValue;
-
+            // CoinValue is int-capped; successful spend fits uint after the check above.
             ConsumeCurrency(coinStackWcid, (uint)amount);
             return true;
         }

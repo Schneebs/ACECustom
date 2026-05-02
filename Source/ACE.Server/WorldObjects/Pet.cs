@@ -216,7 +216,10 @@ namespace ACE.Server.WorldObjects
             var dist = GetCylinderDistance(P_PetOwner);
 
             if (dist > PetFollowMaxDistance)
+            {
                 Destroy();
+                return;
+            }
 
             if (!IsMoving && dist > PetFollowMinDistance)
             {

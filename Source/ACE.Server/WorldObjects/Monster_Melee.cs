@@ -110,6 +110,9 @@ namespace ACE.Server.WorldObjects
                             // this is a player taking damage
                             targetPlayer.TakeDamage(this, damageEvent);
 
+                            if (combatPet != null)
+                                CombatPet.TryNotifyOwnerOutgoingPhysical(combatPet, targetPlayer, damageEvent.Damage, damageEvent.DamageType, "Melee");
+
                             if (damageEvent.ShieldMod != 1.0f)
                             {
                                 var shieldSkill = targetPlayer.GetCreatureSkill(Skill.Shield);
@@ -160,6 +163,8 @@ namespace ACE.Server.WorldObjects
                                     if (cleaveHit is Player cleavePlayer)
                                     {
                                         cleavePlayer.TakeDamage(this, cleaveDamageEvent);
+                                        if (combatPet != null)
+                                            CombatPet.TryNotifyOwnerOutgoingPhysical(combatPet, cleavePlayer, cleaveDamageEvent.Damage, cleaveDamageEvent.DamageType, "Melee (cleave)");
                                     }
                                     else
                                     {

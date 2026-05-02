@@ -258,8 +258,11 @@ namespace ACE.Server.WorldObjects
             }
 
             // Pet Bonding System - bond XP scales with pet damage share and the owner's kill XP modifier stack (same profile as EarnXP).
+            // Accumulate per summoning device so TryAwardBondXp (save + network) runs once per device per kill.
             if (ServerConfig.pet_bond_enabled.Value && baseXp > 0)
             {
+                var bondXpByDevice = new Dictionary<uint, (Player Owner, long Xp)>();
+
                 foreach (var kvp in DamageHistory.TotalDamage)
                 {
                     var info = kvp.Value;
@@ -292,12 +295,26 @@ namespace ACE.Server.WorldObjects
                         }
                     }
 
-                    if (device != null)
-                    {
-                        var awarded = device.TryAwardBondXp(playerDamager, bondXp, out var leveledUp);
-                        if (awarded && leveledUp)
-                            playerDamager.SendMessage($"Your bond with {device.GetBondMessageDisplayName()} deepens. (Bond Level {device.PetBondLevel:N0})");
-                    }
+                    if (device == null)
+                        continue;
+
+                    var key = device.Guid.Full;
+                    if (bondXpByDevice.TryGetValue(key, out var acc))
+                        bondXpByDevice[key] = (playerDamager, acc.Xp + bondXp);
+                    else
+                        bondXpByDevice[key] = (playerDamager, bondXp);
+                }
+
+                foreach (var kv in bondXpByDevice)
+                {
+                    var (owner, xp) = kv.Value;
+                    var device = owner.FindObject(kv.Key, Player.SearchLocations.MyInventory | Player.SearchLocations.MyEquippedItems) as PetDevice;
+                    if (device == null)
+                        continue;
+
+                    var awarded = device.TryAwardBondXp(owner, xp, out var leveledUp);
+                    if (awarded && leveledUp)
+                        owner.SendMessage($"Your bond with {device.GetBondMessageDisplayName()} deepens. (Bond Level {device.PetBondLevel:N0})");
                 }
             }
         }
