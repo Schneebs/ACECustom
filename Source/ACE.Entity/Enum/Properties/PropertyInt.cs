@@ -738,6 +738,11 @@ namespace ACE.Entity.Enum.Properties
         TimesJailed                             = 9044,
         /// <summary>Server/admin: UCM checks passed count (leaderboard stat).</summary>
         TimesUcmCheckPassed                     = 9045,
+
+        /// <summary>Pet bond level stored on combat pet summoning essence (server/custom).</summary>
+        PetBondLevel                            = 9046,
+        /// <summary>DamageType copied from capture source for combat pet appearance/rules.</summary>
+        CapturedSourceDamageType                = 9047,
     }
 
     public static class PropertyIntExtensions

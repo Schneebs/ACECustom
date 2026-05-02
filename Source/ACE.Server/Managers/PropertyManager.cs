@@ -308,6 +308,39 @@ namespace ACE.Server.Managers
         public static ConfigProperty<bool> permit_corpse_all { get; private set; } = new(false, "If TRUE, /permit grants permittees access to all corpses of the permitter. Defaults to FALSE as per retail, where /permit only grants access to 1 locked corpse");
         public static ConfigProperty<bool> persist_movement { get; private set; } = new(false, "If TRUE, persists autonomous movements such as turns and sidesteps through non-autonomous server actions. Retail didn't appear to do this, but some players may prefer this.");
         public static ConfigProperty<bool> pet_stow_replace { get; private set; } = new(false, "pet stowing for different pet devices becomes a stow and replace. defaults to retail value of false");
+
+        // Combat pet / bond / capture (custom): referenced by CombatPet, PetDevice, Creature_Death, etc.
+        public static ConfigProperty<bool> pet_bond_enabled { get; private set; } = new(false, "If TRUE, pet bond XP and bond scaling features are enabled.");
+        public static ConfigProperty<bool> pet_apply_capture_source_damage_type { get; private set; } = new(true, "If TRUE, combat pets may use captured source damage type metadata.");
+        public static ConfigProperty<bool> pet_combat_unlimited_lifespan { get; private set; } = new(false, "If TRUE, combat pets ignore summoned lifespan decay.");
+        public static ConfigProperty<bool> pet_combat_summon_aug_spell_mitigation_enabled { get; private set; } = new(false, "If TRUE, reduce spell damage to combat pets from augmentation scaling.");
+        public static ConfigProperty<bool> pet_combat_summon_aug_spell_mitigation_players_only { get; private set; } = new(true, "If TRUE, aug mitigation applies only when spell source is a player.");
+        public static ConfigProperty<bool> pet_combat_damage_debug_chat { get; private set; } = new(false, "If TRUE, sends combat pet damage debug lines to owner chat.");
+        public static ConfigProperty<bool> pet_combat_recall_block_debug { get; private set; } = new(false, "If TRUE, logs recall-block diagnostics (server log only).");
+        public static ConfigProperty<bool> pet_combat_recall_block_device_cooldown_visual { get; private set; } = new(false, "If TRUE, mirrors recall block duration onto summoning device cooldown ring.");
+        public static ConfigProperty<bool> pet_melee_motion_dps_normalize { get; private set; } = new(false, "If TRUE, scales combat pet melee damage to normalize DPS vs motion table changes.");
+        public static ConfigProperty<bool> pet_combat_follow_owner_when_idle { get; private set; } = new(true, "If TRUE, idle combat pets follow owner using Pet.Tick / leash behavior.");
+        public static ConfigProperty<bool> pet_self_boost_overflow_to_combat_pet { get; private set; } = new(false, "If TRUE, beneficial self-cast overflow healing may apply to active combat pet.");
+        public static ConfigProperty<bool> pet_summon_cooldown_on_pet_death_only { get; private set; } = new(false, "If TRUE, applies essence cooldown on combat pet death only (not every dismiss).");
+        public static ConfigProperty<bool> pet_device_pyreal_auto_refill_enabled { get; private set; } = new(false, "If TRUE, players may pay pyreals to refill empty summoning essence charges when enrolled.");
+
+        public static ConfigProperty<long> pet_bond_level_cap { get; private set; } = new(1000, "Maximum pet bond level.");
+        public static ConfigProperty<long> pet_summon_lifespan_seconds_per_aug { get; private set; } = new(0, "Seconds of combat pet lifespan added per summoning augmentation.");
+        public static ConfigProperty<long> pet_combat_lifespan_seconds_per_duration_aug { get; private set; } = new(0, "Seconds of lifespan added per duration augmentation on essence.");
+        public static ConfigProperty<long> pet_combat_recall_block_after_damage_seconds { get; private set; } = new(0, "Seconds after combat pet damage during which owner recall/stow may be blocked (0 = off).");
+        public static ConfigProperty<long> pet_bond_xp_min_award { get; private set; } = new(1, "Minimum bond XP awarded per qualifying kill.");
+
+        public static ConfigProperty<double> pet_combat_summon_aug_spell_mitigation_max { get; private set; } = new(0.5, "Upper cap on aug spell mitigation fraction for combat pets.");
+        public static ConfigProperty<double> pet_combat_summon_aug_spell_mitigation_scale { get; private set; } = new(1.0, "Scales aug spell mitigation applied to combat pets.");
+        public static ConfigProperty<double> pet_bond_xp_multiplier { get; private set; } = new(1.0, "Multiplier for bond XP from creature kills.");
+        public static ConfigProperty<double> pet_bond_cdr_cap { get; private set; } = new(0.0, "Bond level bonus cap for cooldown reduction (interpreted by PetDevice).");
+        public static ConfigProperty<double> pet_bond_cd_cap { get; private set; } = new(0.0, "Bond level bonus cap for cooldown (seconds or fraction per design).");
+        public static ConfigProperty<double> pet_bond_vitality_per_level { get; private set; } = new(0.0, "Vitality scaling per bond level.");
+        public static ConfigProperty<long> pet_device_pyreal_auto_refill_cost_per_charge { get; private set; } = new(1, "Pyreal cost per restored essence charge when auto-refill is enabled.");
+        public static ConfigProperty<double> pet_combat_owner_recall_distance_m { get; private set; } = new(0.0, "Owner distance (m) past which engaged combat pet may drop target for idle follow (0 = disabled).");
+        public static ConfigProperty<double> pet_melee_motion_dps_normalize_min { get; private set; } = new(0.5, "Minimum melee DPS normalization factor.");
+        public static ConfigProperty<double> pet_melee_motion_dps_normalize_max { get; private set; } = new(2.0, "Maximum melee DPS normalization factor.");
+
         public static ConfigProperty<bool> player_config_command { get; private set; } = new(false, "If enabled, players can use /config to change their settings via text commands");
         public static ConfigProperty<bool> player_receive_immediate_save { get; private set; } = new(false, "if enabled, when the player receives items from an NPC, they will be saved immediately");
         public static ConfigProperty<bool> pk_server { get; private set; } = new(false, "set this to TRUE for darktide servers");

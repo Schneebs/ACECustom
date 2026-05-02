@@ -238,5 +238,12 @@ namespace ACE.Entity.Enum.Properties
         /// Single-use, extremely rare item obtained by exchanging 5000 Flawed Siphon Lenses.
         /// </summary>
         IsGuaranteedCaptureLens           = 9042,
+
+        /// <summary>Combat pet essence: bond attunement enabled for this device.</summary>
+        PetBondAttuned                   = 9043,
+        /// <summary>Combat pet uses captured creature weapon appearance/skin.</summary>
+        CombatPetCaptureSkinWeapon       = 9044,
+        /// <summary>Player account flag: opt-in for pyreal auto-refill on pet summoning devices.</summary>
+        PetDevicePyrealAutoRefillEnrolled = 9045,
     }
 }
