@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Globalization;
 
 namespace ACE.Entity.Enum.Properties
@@ -742,6 +742,25 @@ namespace ACE.Entity.Enum.Properties
         /// Custom targeting behavior flags (<see cref="ACE.Entity.Enum.CustomTargetingBehavior"/>).
         /// </summary>
         TargetingFlags                          = 9046,
+
+        // ── ILT Ability Charm System (50000–50099) ────────────────────────────────
+        /// <summary>On an IsAbilityCharm item: integer key into CharmAbilityRegistry (1–50).</summary>
+        CharmGrantsAbility = 50000,
+
+        /// <summary>On a charm item: the tier/level of the charm (1, 2, 3).</summary>
+        CharmLevel = 50005,
+
+        /// <summary>On a player: the level of the currently active charm.</summary>
+        ActiveCharmLevel = 50016,
+
+        // ── ILT Player UI Preferences (50101+) ──────────────────────────────────
+        /// <summary>
+        /// Player's damage number display mode.
+        /// 0 = Default (vanilla, no formatting)
+        /// 1 = Commas (1,247)
+        /// 2 = Short (1.2K / 2.2M / 1.5B / 3.2T / 1Q)
+        /// </summary>
+        DamageNumberFormat = 50101,
     }
 
     public static class PropertyIntExtensions

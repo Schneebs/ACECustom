@@ -1194,6 +1194,10 @@ namespace ACE.Server.WorldObjects
             if (SafeSpellComponents || ServerConfig.safe_spell_comps.Value)
                 return;
 
+            // ILT: Infinite Casting Stone — passive bypass while charm is in inventory
+            if (HasInfiniteCasting)
+                return;
+
             var burned = spell.TryBurnComponents(this);
             if (burned.Count == 0) return;
 
@@ -1221,6 +1225,12 @@ namespace ACE.Server.WorldObjects
 
                     continue;
                 }
+                if (item.UnlimitedUse)
+                {
+                    burned.RemoveAt(i); // don't report infinite-use items as consumed
+                    continue;
+                }
+
                 TryConsumeFromInventoryWithNetworking(item, 1);
             }
 
@@ -1240,6 +1250,10 @@ namespace ACE.Server.WorldObjects
             spell.Formula.GetPlayerFormula(this);
 
             if (!SpellComponentsRequired || !ServerConfig.require_spell_comps.Value)
+                return true;
+
+            // ILT: Infinite Casting Stone — passive bypass while charm is in inventory
+            if (HasInfiniteCasting)
                 return true;
 
             var requiredComps = spell.Formula.GetRequiredComps();

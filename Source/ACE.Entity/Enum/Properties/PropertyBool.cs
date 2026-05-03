@@ -193,7 +193,8 @@ namespace ACE.Entity.Enum.Properties
         [AssessmentProperty]
         SplitArrows                      = 9030,
         IsSplitArrow                     = 9031,
-        IsSplitArrowKill                 = 9032,
+        [Ephemeral]
+        LastHitWasSplitArrow             = 9032,
         [AssessmentProperty]
         IsCharm                          = 9040,
         AllowFriendlyPlayerDamage       = 9043,
@@ -240,6 +241,42 @@ namespace ACE.Entity.Enum.Properties
         /// Single-use, extremely rare item obtained by exchanging 5000 Flawed Siphon Lenses.
         /// </summary>
         IsGuaranteedCaptureLens           = 9042,
+
+        /// <summary>If TRUE, item has unlimited uses and will never be consumed.</summary>
+        [AssessmentProperty]
+        InfiniteCharges                   = 9045,
+
+        // ── ILT Ability Charm System (50000–50099) ────────────────────────────────
+        /// <summary>On an ability charm item: marks it as an ability-granting charm.</summary>
+        IsAbilityCharm   = 50000,
+        /// <summary>On an ability charm item: true when the charm has been activated/consumed.</summary>
+        IsCharmActivated = 50001,
+        /// <summary>On an ability charm item: true for limited trial charms that expire.</summary>
+        IsTestCharm      = 50002,
+
+        // ── ILT Ability Flags — players (50010+) ─────────────────────────────────
+        /// <summary>Player has the Mana Barrier ability active (absorbs damage using mana).</summary>
+        HasManaBarrier   = 50010,
+
+        /// <summary>ILT Skill #2: Melee attacks cost stamina for bonus damage.</summary>
+        HasHeavySwing = 50011,
+
+        /// <summary>ILT Skill #3: Missile/bow attacks cost stamina for bonus damage.</summary>
+        HasHeavyDraw = 50012,
+
+        /// <summary>ILT Skill #4: Magic attacks cost mana for bonus damage.</summary>
+        HasFocusedCasting = 50013,
+        HasChaining       = 50014,
+        HasRepeater       = 50015,
+        HasBloodLetting   = 50017,
+
+        /// <summary>ILT Skill #16: Spells are cast without consuming components while charm is in inventory.</summary>
+        HasInfiniteCasting = 50028,
+
+        /// <summary>ILT Player Pref: Show [Overkill] suffix on kill/death messages. Default ON.</summary>
+        ShowOverkill = 50029,
+
+        // ── ILT Player UI Preferences → see PropertyInt.DamageNumberFormat (50101) ───
     }
 }
 
