@@ -163,12 +163,10 @@ namespace ACE.Server.WorldObjects
                 }
                 else
                 {
-                    // stow currently active passive pet
-                    // stowing the currently active passive pet w/ a combat pet device will unfortunately start the cooldown timer (and decrease the structure?) on the combat pet device, as per retail
-                    // spawning the combat pet will require another double click in ~45s, as per retail
+                    // Stow passive pet so this summon can proceed on the same activation (retail often required a second click; same-click replace avoids bogus cooldown/structure when activation cooldown is enabled).
                     player.CurrentActivePet.Destroy();
 
-                    return null;
+                    return true;
                 }
             }
             return false;

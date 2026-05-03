@@ -317,7 +317,7 @@ namespace ACE.Server.Managers
         public static ConfigProperty<bool> pet_combat_summon_aug_spell_mitigation_players_only { get; private set; } = new(true, "If TRUE, aug mitigation applies only when spell source is a player.");
         public static ConfigProperty<bool> pet_combat_damage_debug_chat { get; private set; } = new(false, "If TRUE, sends combat pet damage debug lines to owner chat.");
         public static ConfigProperty<bool> pet_combat_recall_block_debug { get; private set; } = new(false, "If TRUE, logs recall-block diagnostics (server log only).");
-        public static ConfigProperty<bool> pet_combat_recall_block_device_cooldown_visual { get; private set; } = new(false, "If TRUE, mirrors recall block duration onto summoning device cooldown ring.");
+        public static ConfigProperty<bool> pet_combat_recall_block_device_cooldown_visual { get; private set; } = new(false, "If TRUE, shows summoning essence cooldown ring after combat pet damage; duration comes from pet_combat_essence_damage_cooldown_ring_seconds (not recall block seconds).");
         public static ConfigProperty<bool> pet_melee_motion_dps_normalize { get; private set; } = new(false, "If TRUE, scales combat pet melee damage to normalize DPS vs motion table changes.");
         public static ConfigProperty<bool> pet_combat_follow_owner_when_idle { get; private set; } = new(true, "If TRUE, idle combat pets follow owner using Pet.Tick / leash behavior.");
         public static ConfigProperty<bool> pet_self_boost_overflow_to_combat_pet { get; private set; } = new(false, "If TRUE, beneficial self-cast overflow healing may apply to active combat pet.");
@@ -328,6 +328,7 @@ namespace ACE.Server.Managers
         public static ConfigProperty<long> pet_summon_lifespan_seconds_per_aug { get; private set; } = new(0, "Seconds of combat pet lifespan added per summoning augmentation.");
         public static ConfigProperty<long> pet_combat_lifespan_seconds_per_duration_aug { get; private set; } = new(0, "Seconds of lifespan added per duration augmentation on essence.");
         public static ConfigProperty<long> pet_combat_recall_block_after_damage_seconds { get; private set; } = new(0, "Seconds after combat pet damage during which owner recall/stow may be blocked (0 = off).");
+        public static ConfigProperty<long> pet_combat_essence_damage_cooldown_ring_seconds { get; private set; } = new(5, "Summoning essence cooldown ring duration (seconds) after combat pet deals or takes damage. Separate from pet_combat_recall_block_after_damage_seconds. 0 = no damage-triggered ring.");
         public static ConfigProperty<long> pet_bond_xp_min_award { get; private set; } = new(1, "Minimum bond XP awarded per qualifying kill.");
 
         public static ConfigProperty<double> pet_combat_summon_aug_spell_mitigation_max { get; private set; } = new(0.5, "Upper cap on aug spell mitigation fraction for combat pets.");

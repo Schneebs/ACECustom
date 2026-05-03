@@ -487,12 +487,19 @@ namespace ACE.Server.WorldObjects
             if (ServerConfig.pet_combat_recall_block_debug.Value)
                 TraceRecallBlock(sourceTag, $"armed dealt={dealt} blockSec={blockSec} untilUnix={_ownerFollowRecallBlockedUntilUnix:F0} now={now:F0}");
 
-            TryRefreshRecallBlockSummoningDeviceCooldown((float)blockSec);
+            TryRefreshRecallBlockSummoningDeviceCooldown();
         }
 
-        private void TryRefreshRecallBlockSummoningDeviceCooldown(float durationSec)
+        /// <summary>
+        /// Uses <see cref="ServerConfig.pet_combat_essence_damage_cooldown_ring_seconds"/> for the essence UI ring (independent of recall-block duration).
+        /// </summary>
+        private void TryRefreshRecallBlockSummoningDeviceCooldown()
         {
-            if (!ServerConfig.pet_combat_recall_block_device_cooldown_visual.Value || durationSec <= 0)
+            if (!ServerConfig.pet_combat_recall_block_device_cooldown_visual.Value)
+                return;
+
+            var ringSec = (float)ServerConfig.pet_combat_essence_damage_cooldown_ring_seconds.Value;
+            if (ringSec <= 0)
                 return;
 
             var owner = P_PetOwner;
@@ -504,7 +511,7 @@ namespace ACE.Server.WorldObjects
             if (device?.CooldownId == null)
                 return;
 
-            owner.EnchantmentManager.StartOrRefreshItemCooldown(device.Guid.Full, device.CooldownId.Value, durationSec);
+            owner.EnchantmentManager.StartOrRefreshItemCooldown(device.Guid.Full, device.CooldownId.Value, ringSec);
         }
 
         internal static void TraceRecallBlockStatic(CombatPet pet, string stage, string detail)
@@ -529,10 +536,12 @@ namespace ACE.Server.WorldObjects
         {
             var dealt = base.TakeDamage(source, damageType, amount, crit);
 
-            if (dealt > 0)
+            // Lethal damage: Creature.TakeDamage calls Die() before returning; CombatPet.Die applies death cooldown on the essence.
+            // Do not run recall-block + 5s ring refresh after that — it would replace the death cooldown (same CooldownId/caster).
+            if (dealt > 0 && !IsDead)
                 ApplyOwnerFollowRecallBlockFromDamage(dealt, "TakeDamage");
 
-            if (dealt > 0 && ServerConfig.pet_combat_damage_debug_chat.Value)
+            if (dealt > 0 && !IsDead && ServerConfig.pet_combat_damage_debug_chat.Value)
             {
                 var owner = P_PetOwner;
                 if (owner?.Session != null)

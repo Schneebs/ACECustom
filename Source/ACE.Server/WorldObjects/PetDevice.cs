@@ -497,7 +497,8 @@ namespace ACE.Server.WorldObjects
 
             var result = SummonCreature(player, wcid);
 
-            if (result == null || result.Value)
+            // Only consume a charge on a successful summon. (SummonCreature returns null when Init aborts; treating null as success wrongly decremented structure.)
+            if (result == true)
             {
                 // CombatPet devices should always have structure
                 if (Structure != null)
