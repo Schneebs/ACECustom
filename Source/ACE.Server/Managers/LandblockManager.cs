@@ -12,6 +12,7 @@ using ACE.Common;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Server.Entity;
+using ACE.Server.Entity.Actions;
 using ACE.Server.WorldObjects;
 using ACE.Database;
 using ACE.Database.Models.World;
@@ -390,25 +391,50 @@ namespace ACE.Server.Managers
                 return;
             }
 
-            // Remove from the old landblock -- force
+            var variation = worldObject.Location.Variation;
+
+            // During multi-threaded landblock ticking, Remove/Add must run on each landblock's group thread.
+            // Physics (movedObjects) runs after Parallel.ForEach with CurrentlyTickingLandblockGroupsMultiThreaded = false.
+            // Monster AI can call RelocateObjectForPhysics from TickMultiThreadedWork on one group while the
+            // object's CurrentLandblock belongs to another — defer remove onto oldBlock's queue when needed.
+            var mt = CurrentlyTickingLandblockGroupsMultiThreaded;
+            var curGroup = CurrentMultiThreadedTickingLandblockGroup.Value;
+            var oldGroup = oldBlock?.CurrentLandblockGroup;
+            var newGroup = newBlock?.CurrentLandblockGroup;
+
+            var removeNeedsDefer = mt && oldBlock != null && oldGroup != null && !ReferenceEquals(oldGroup, curGroup);
+            var addNeedsDefer = mt && newGroup != null && !ReferenceEquals(newGroup, curGroup);
+
+            if (removeNeedsDefer)
+            {
+                oldBlock.EnqueueAction(new ActionEventDelegate(ActionType.Landblock_Relocate_RemoveForPhysics, () =>
+                {
+                    oldBlock.RemoveWorldObjectForPhysics(worldObject.Guid, adjacencyMove);
+
+                    // TLS now matches oldGroup; defer add if destination is owned by a different group.
+                    var addDeferredHere = CurrentlyTickingLandblockGroupsMultiThreaded
+                        && newGroup != null
+                        && !ReferenceEquals(newGroup, CurrentMultiThreadedTickingLandblockGroup.Value);
+
+                    worldObject.CurrentLandblock = newBlock;
+
+                    if (addDeferredHere)
+                        newBlock.EnqueueAddWorldObjectForPhysics(worldObject, variation);
+                    else
+                        newBlock.AddWorldObjectForPhysics(worldObject, variation);
+                }));
+                return;
+            }
+
             oldBlock?.RemoveWorldObjectForPhysics(worldObject.Guid, adjacencyMove);
 
-            // Thread-local tick context is cleared before RelocateObjectForPhysics runs for movedObjects;
-            // use landblock groups + config so cross-group physics relocations still enqueue when MT physics is on.
-            var crossGroupPhysicsMove = ConfigManager.Config.Server.Threading.MultiThreadedLandblockGroupPhysicsTicking
-                && oldBlock?.CurrentLandblockGroup != null
-                && newBlock.CurrentLandblockGroup != null
-                && oldBlock.CurrentLandblockGroup != newBlock.CurrentLandblockGroup;
-
-            // RemoveWorldObjectForPhysics clears CurrentLandblock until the add runs; point at the destination
-            // so same-tick lookups do not see a dangling null between remove and the queued add.
-            if (crossGroupPhysicsMove)
+            if (addNeedsDefer)
+            {
                 worldObject.CurrentLandblock = newBlock;
-
-            if (crossGroupPhysicsMove)
-                newBlock.EnqueueAddWorldObjectForPhysics(worldObject, worldObject.Location.Variation);
+                newBlock.EnqueueAddWorldObjectForPhysics(worldObject, variation);
+            }
             else
-                newBlock.AddWorldObjectForPhysics(worldObject, worldObject.Location.Variation);
+                newBlock.AddWorldObjectForPhysics(worldObject, variation);
         }
 
         public static bool IsLoaded(LandblockId landblockId, int? variationId = null)

@@ -1139,7 +1139,8 @@ namespace ACE.Server.WorldObjects
 
         /// <summary>
         /// When <see cref="PropertyInt.Structure"/> is 0, optionally restores one charge if the server allows pyreal auto-refill,
-        /// the player has enrolled (<see cref="PropertyBool.PetDevicePyrealAutoRefillEnrolled"/>), and they can pay the configured cost.
+        /// the player has enrolled (<see cref="PropertyBool.PetDevicePyrealAutoRefillEnrolled"/>), and the configured cost is not negative
+        /// (0 = free, &gt; 0 = must be able to pay).
         /// Returns true if the device now has at least one charge.
         /// </summary>
         private bool TryApplyPyrealAutoRefillBeforeSummon(Player player)
@@ -1151,10 +1152,16 @@ namespace ACE.Server.WorldObjects
                 return false;
 
             var cost = ServerConfig.pet_device_pyreal_auto_refill_cost_per_charge.Value;
-            if (cost <= 0)
+            if (cost < 0)
                 return false;
 
-            if (!player.TrySpendPyreals(cost))
+            if (cost == 0)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "You restore one charge on your summoning essence at no cost.",
+                    ChatMessageType.Broadcast));
+            }
+            else if (!player.TrySpendPyreals(cost))
             {
                 player.Session.Network.EnqueueSend(new GameMessageSystemChat(
                     $"You need {cost:N0} pyreals to auto-replenish your summoning essence. You do not have enough pyreals.",
@@ -1165,9 +1172,12 @@ namespace ACE.Server.WorldObjects
             Structure = 1;
             player.UpdateProperty(this, PropertyInt.Structure, Structure.Value);
 
-            player.Session.Network.EnqueueSend(new GameMessageSystemChat(
-                $"You spend {cost:N0} pyreals to restore one charge on your summoning essence.",
-                ChatMessageType.Broadcast));
+            if (cost > 0)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"You spend {cost:N0} pyreals to restore one charge on your summoning essence.",
+                    ChatMessageType.Broadcast));
+            }
 
             return true;
         }

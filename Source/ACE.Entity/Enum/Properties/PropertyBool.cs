@@ -196,6 +196,8 @@ namespace ACE.Entity.Enum.Properties
         IsSplitArrowKill                 = 9032,
         [AssessmentProperty]
         IsCharm                          = 9040,
+        AllowFriendlyPlayerDamage       = 9043,
+        BreakPeaceOnHostileAction       = 9044,
         /// <summary>
         /// If TRUE on a weapon, allows multi-strike hits to each roll a proc with decay
         /// </summary>
@@ -228,7 +230,7 @@ namespace ACE.Entity.Enum.Properties
 
         // Resonance Lens System (Second-Chance Shiny Capture)
         /// <summary>
-        /// If TRUE, this lens is a Resonance Lens that grants a second-chance capture attempt 
+        /// If TRUE, this lens is a Resonance Lens that grants a second-chance capture attempt
         /// after a failed shiny capture. Only usable once per failed shiny encounter.
         /// </summary>
         IsResonanceLens                   = 9041,
@@ -247,3 +249,4 @@ namespace ACE.Entity.Enum.Properties
         PetDevicePyrealAutoRefillEnrolled = 9045,
     }
 }
+

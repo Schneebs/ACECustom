@@ -739,15 +739,15 @@ namespace ACE.Entity.Enum.Properties
         /// <summary>Server/admin: UCM checks passed count (leaderboard stat).</summary>
         TimesUcmCheckPassed                     = 9045,
 
-        /// <summary>Pet bond level stored on combat pet summoning essence (server/custom).</summary>
-        PetBondLevel                            = 9046,
-        /// <summary>DamageType copied from capture source for combat pet appearance/rules.</summary>
-        CapturedSourceDamageType                = 9047,
-
         /// <summary>
         /// Custom targeting behavior flags (<see cref="ACE.Entity.Enum.CustomTargetingBehavior"/>).
         /// </summary>
-        TargetingFlags                          = 9048,
+        TargetingFlags                          = 9046,
+
+        /// <summary>Pet bond level stored on combat pet summoning essence (server/custom).</summary>
+        PetBondLevel                            = 9047,
+        /// <summary>DamageType copied from capture source for combat pet appearance/rules.</summary>
+        CapturedSourceDamageType                = 9048,
     }
 
     public static class PropertyIntExtensions
@@ -900,6 +900,9 @@ namespace ACE.Entity.Enum.Properties
                 case PropertyInt.HookGroup:
                     return System.Enum.GetName(typeof(HookGroupType), value);
 
+                case PropertyInt.TargetingFlags:
+                    return ((ACE.Entity.Enum.CustomTargetingBehavior)value).ToString();
+
                 //case PropertyInt.TypeOfAlteration:
                 //    return System.Enum.GetName(typeof(SkillAlterationType), value);
             }
@@ -908,3 +911,5 @@ namespace ACE.Entity.Enum.Properties
         }
     }
 }
+
+

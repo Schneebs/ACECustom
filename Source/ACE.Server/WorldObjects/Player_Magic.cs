@@ -1118,7 +1118,7 @@ namespace ACE.Server.WorldObjects
                     if (!spell.IsProjectile)
                     {
                         if (targetPlayer == null)
-                            OnAttackMonster(targetCreature);
+                            OnAttackMonster(targetCreature, spell.IsHarmful);
 
                         if (TryResistSpell(target, spell, itemCaster))
                             break;

@@ -742,6 +742,19 @@ namespace ACE.Server.WorldObjects
         public virtual uint TakeDamage(WorldObject source, DamageType damageType, float amount, bool crit = false)
         {
             var tryDamage = (int)Math.Round(amount);
+
+            if (damageType == DamageType.Stamina)
+            {
+                var staminaDamage = -UpdateVitalDelta(Stamina, -tryDamage);
+                return (uint)Math.Max(0, staminaDamage);
+            }
+
+            if (damageType == DamageType.Mana)
+            {
+                var manaDamage = -UpdateVitalDelta(Mana, -tryDamage);
+                return (uint)Math.Max(0, manaDamage);
+            }
+
             var damage = -UpdateVitalDelta(Health, -tryDamage);
 
             // TODO: update monster stamina?

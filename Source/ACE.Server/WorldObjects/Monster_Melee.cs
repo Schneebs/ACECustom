@@ -107,6 +107,9 @@ namespace ACE.Server.WorldObjects
                     {
                         if (targetPlayer != null)
                         {
+                            if (!CanDamage(target))
+                                return;
+
                             // this is a player taking damage
                             targetPlayer.TakeDamage(this, damageEvent);
 
@@ -153,6 +156,9 @@ namespace ACE.Server.WorldObjects
                             
                             foreach (var cleaveHit in cleave)
                             {
+                                if (!CanDamage(cleaveHit))
+                                    continue;
+
                                 var cleaveDamageEvent = DamageEvent.CalculateDamage(this, cleaveHit, weapon, motionCommand, attackFrames[0].attackHook);
 
                                 if (combatPet != null && combatPet.MeleeMotionDpsFactor != 1f && cleaveDamageEvent.HasDamage)
