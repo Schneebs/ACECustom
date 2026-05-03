@@ -133,10 +133,30 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
-            if (creatureTarget != null && (creatureTarget.IsDead || (combatPet == null && !IsVisibleTarget(creatureTarget))))
+            if (creatureTarget != null && creatureTarget.IsDead)
             {
+                if (HasRetaliateTarget(creatureTarget))
+                    RemoveRetaliateTarget(creatureTarget);
+                AttackTarget = null;
+                InvalidateTargetCaches();
                 FindNextTarget();
                 return;
+            }
+
+            // Custom mob-to-mob targeting can briefly lag visibility table updates after spawn/idle transitions.
+            // If the current non-player foe is valid, pin it via retaliate so we don't bounce Awake<->Idle.
+            if (creatureTarget != null && combatPet == null && !IsVisibleTarget(creatureTarget))
+            {
+                if (UsesExtendedFoeTargeting
+                    && creatureTarget is not Player
+                    && (PotentialFoe(creatureTarget) || AllowFactionCombat(creatureTarget)))
+                    AddRetaliateTarget(creatureTarget);
+
+                if (!IsVisibleTarget(creatureTarget))
+                {
+                    FindNextTarget();
+                    return;
+                }
             }
 
             if (firstUpdate)
