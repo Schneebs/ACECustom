@@ -116,13 +116,13 @@ namespace ACE.Server.WorldObjects
 
             if (player.CurrentActivePet is CombatPet combatPetReplace)
             {
-                // QoL: using a combat pet essence/device a second time should stow the active combat pet,
-                // similar to how passive pet devices behave on reuse.
+                // Same creature: stow only (no resummon this activation), like passive pets. Different creature: despawn old and continue Init.
                 if (CombatPet.TryDenyOwnerStowFromRecallBlock(player, combatPetReplace, "HandleCurrentActivePet_Replace"))
                     return false;
 
+                var stowSameCombatPet = WeenieClassId == combatPetReplace.WeenieClassId;
                 player.CurrentActivePet.Destroy();
-                return false;
+                return !stowSameCombatPet;
             }
 
             var stowPet = WeenieClassId == player.CurrentActivePet.WeenieClassId;
