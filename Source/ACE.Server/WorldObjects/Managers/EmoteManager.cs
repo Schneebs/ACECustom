@@ -543,14 +543,30 @@ namespace ACE.Server.WorldObjects.Managers
                     }
                     break;
 
+                /* sets self's PropertyString stat to a specific value */
+                case EmoteType.SetMyStringStat:
+
+                    if (WorldObject != null && emote.Stat != null && emote.TestString != null)
+                    {
+                        var stringProperty = (PropertyString)emote.Stat;
+                        var newStringValue = emote.TestString;
+
+                        WorldObject.SetProperty(stringProperty, newStringValue);
+
+                        if (WorldObject is Player selfStringPlayer)
+                            selfStringPlayer.Session.Network.EnqueueSend(new GameMessagePrivateUpdatePropertyString(selfStringPlayer, stringProperty, newStringValue));
+                    }
+                    break;
+
+
+
                 /* sets self's PropertyFloat stat to a specific amount */
                 case EmoteType.SetMyFloatStat:
 
-                    if (WorldObject != null && emote.Stat != null)
+                    if (WorldObject != null && emote.Stat != null && emote.Percent.HasValue)
                     {
                         var floatProperty = (PropertyFloat)emote.Stat;
-                        var newValue = emote.Percent ?? 1.0f; 
-                        
+                        var newValue = emote.Percent.Value;                        
                         if (WorldObject is Player pUpdater)
                         {
                             pUpdater.UpdateProperty(pUpdater, floatProperty, newValue);
@@ -583,11 +599,11 @@ namespace ACE.Server.WorldObjects.Managers
                 /* sets self's PropertyInt stat to a specific amount */
                 case EmoteType.SetMyIntStat:
 
-                    if (WorldObject != null && emote.Stat != null)
+                    if (WorldObject != null && emote.Stat != null && emote.Amount.HasValue)
                     {
                         var intProperty = (PropertyInt)emote.Stat;
-                        var newValue = emote.Amount ?? 1; 
-                        
+                        var newValue = emote.Amount.Value;
+
                         WorldObject.SetProperty(intProperty, newValue);
 
                         if (WorldObject is Player selfPlayer)
@@ -598,11 +614,11 @@ namespace ACE.Server.WorldObjects.Managers
                 /* sets self's PropertyInt64 stat to a specific amount */
                 case EmoteType.SetMyInt64Stat:
 
-                    if (WorldObject != null && emote.Stat != null)
+                    if (WorldObject != null && emote.Stat != null && emote.Amount64.HasValue)
                     {
                         var int64Property = (PropertyInt64)emote.Stat;
-                        var newValue = emote.Amount64 ?? 1; 
-                        
+                        var newValue = emote.Amount64.Value;
+
                         WorldObject.SetProperty(int64Property, newValue);
 
                         if (WorldObject is Player selfPlayer)
@@ -3681,7 +3697,7 @@ namespace ACE.Server.WorldObjects.Managers
         /// <summary>
         /// Selects which ReceiveDamage emote sets should fire for a given incoming damage type.
         /// Each distinct non-null DamageType group that bitmask-matches the incoming damage contributes at most one
-        /// winner via the provided RNG. The null-DamageType fallback fires only when no typed group matched at all —
+        /// winner via the provided RNG. The null-DamageType fallback fires only when no typed group matched at all â€”
         /// not when a matching group's probability roll was skipped.
         /// </summary>
         /// <param name="receiveDamageEmotes">All emote rows with category ReceiveDamage.</param>
@@ -3939,6 +3955,7 @@ namespace ACE.Server.WorldObjects.Managers
                     Sound = (Sound?)action.Sound,
                     SpellId = action.SpellId,
                     StackSize = action.StackSize,
+                    Stat = action.Stat,
                     TestString = action.TestString,
                     TreasureClass = action.TreasureClass,
                     TryToBond = action.TryToBond,
@@ -3998,3 +4015,4 @@ namespace ACE.Server.WorldObjects.Managers
         }
     }
 }
+

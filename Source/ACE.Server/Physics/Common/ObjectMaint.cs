@@ -1092,11 +1092,21 @@ namespace ACE.Server.Physics.Common
                     (PhysicsObj.WeenieObj.FoeType == null || obj.WeenieObj.WorldObject != null && PhysicsObj.WeenieObj.FoeType != obj.WeenieObj.WorldObject.CreatureType))
                 {
                     obj.ObjMaint.AddVisibleTarget(PhysicsObj);
-                    return false;
+                    // Legacy: observer had no Int.73 foe — only the other mob tracked us.
+                    // Custom targeting should only include other monsters in *our* VisibleTargets when the
+                    // config actually targets non-players (not player-only modes such as HostileToAllPlayers).
+                    var selfCreatureInverse = PhysicsObj.WeenieObj.WorldObject as Creature;
+                    if (selfCreatureInverse == null || !selfCreatureInverse.AllowsCustomMonsterTargets)
+                        return false;
                 }
 
-                // only tracking players and combat pets
-                if (!obj.IsPlayer && !obj.WeenieObj.IsCombatPet && PhysicsObj.WeenieObj.FoeType == null)
+                // only tracking players and combat pets, unless this creature has legacy foe targeting
+                // or custom targeting that explicitly includes non-player foes.
+                var selfCreature = PhysicsObj.WeenieObj.WorldObject as Creature;
+                var allowMonsterTargets = PhysicsObj.WeenieObj.FoeType != null
+                    || (selfCreature != null && selfCreature.AllowsCustomMonsterTargets);
+
+                if (!obj.IsPlayer && !obj.WeenieObj.IsCombatPet && !allowMonsterTargets)
                 {
                     log.Debug($"{PhysicsObj.Name}.ObjectMaint.AddVisibleTarget({obj.Name}): tried to add a non-player / non-combat pet");
                     return false;
@@ -1254,12 +1264,18 @@ namespace ACE.Server.Physics.Common
                 rwLock.ExitWriteLock();
             }
         }
-
-        private bool RemoveRetaliateTarget(PhysicsObj obj)
+        public bool RemoveRetaliateTarget(PhysicsObj obj)
         {
-            return RetaliateTargets.Remove(obj.ID);
+            rwLock.EnterWriteLock();
+            try
+            {
+                return RetaliateTargets.Remove(obj.ID);
+            }
+            finally
+            {
+                rwLock.ExitWriteLock();
+            }
         }
-
         /// <summary>
         /// Clears all of the ObjMaint tables for an object
         /// </summary>
