@@ -249,6 +249,13 @@ namespace ACE.Entity.Enum.Properties
         /// </summary>
         IsPassiveSpellSuppressor          = 9046,
 
+        /// <summary>Combat pet essence: bond attunement enabled for this device.</summary>
+        PetBondAttuned                   = 9047,
+        /// <summary>Combat pet uses captured creature weapon appearance/skin.</summary>
+        CombatPetCaptureSkinWeapon       = 9048,
+        /// <summary>Player account flag: opt-in for pyreal auto-refill on pet summoning devices.</summary>
+        PetDevicePyrealAutoRefillEnrolled = 9049,
+
         // -- ILT Ability Charm System (50000-50099) ---------------------------------
         /// <summary>On an ability charm item: marks it as an ability-granting charm.</summary>
         IsAbilityCharm   = 50000,

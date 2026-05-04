@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 
 using ACE.Entity.Enum;
+using ACE.Server.Managers;
 
 namespace ACE.Server.WorldObjects
 {
@@ -82,6 +83,42 @@ namespace ACE.Server.WorldObjects
 
             if (EmoteManager.IsBusy) return;
 
+            // Owner leash while engaged: monster AI never runs Pet follow while AttackTarget is set; if the owner walks away, drop target so idle follow runs.
+            if (this is CombatPet ownerLeashPet
+                && ServerConfig.pet_combat_follow_owner_when_idle.Value
+                && ServerConfig.pet_combat_owner_recall_distance_m.Value > 0
+                && ownerLeashPet.AttackTarget != null
+                && ownerLeashPet.P_PetOwner?.PhysicsObj != null
+                && ownerLeashPet.GetCylinderDistance(ownerLeashPet.P_PetOwner) > (float)ServerConfig.pet_combat_owner_recall_distance_m.Value)
+            {
+                if (ownerLeashPet.IsOwnerFollowRecallBlocked())
+                {
+                    CombatPet.TraceRecallBlockStatic(ownerLeashPet, "Monster_Tick.owner_leash_suppressed",
+                        $"ownerDist>{ServerConfig.pet_combat_owner_recall_distance_m.Value:F0}m recall_blocked_after_damage");
+                }
+                else
+                {
+                    ownerLeashPet.AttackTarget = null;
+                    ownerLeashPet.ResetAttack();
+                    ((Pet)ownerLeashPet).Tick(currentUnixTime);
+                    HandleFindTarget();
+                    return;
+                }
+            }
+
+            // Idle combat pets: use the same Pet.Tick path as passive pets (physics cadence + SlowTick recall),
+            // then only run target search. Without this, idle undamaged pets hit ShouldSkipIdleMonsterTick and
+            // never reach follow logic; physics also diverged from passive Pet.Tick.
+            if (this is CombatPet combatPetRecall
+                && ServerConfig.pet_combat_follow_owner_when_idle.Value
+                && AttackTarget == null
+                && MonsterState != State.Return)
+            {
+                ((Pet)combatPetRecall).Tick(currentUnixTime);
+                HandleFindTarget();
+                return;
+            }
+
             // Optimization: Skip AI tick for idle monsters with no targets nearby
             // Reduces CPU load in high-density landblocks significantly
             // Impact: ~80% CPU reduction in landblocks with 400+ creatures (320 idle, 80 active)
@@ -107,6 +144,12 @@ namespace ACE.Server.WorldObjects
 
             if (AttackTarget == null && MonsterState != State.Return)
             {
+                if (this is CombatPet homeCombatPet && ServerConfig.pet_combat_follow_owner_when_idle.Value)
+                {
+                    ((Pet)homeCombatPet).Tick(currentUnixTime);
+                    HandleFindTarget();
+                    return;
+                }
                 MoveToHome();
                 return;
             }

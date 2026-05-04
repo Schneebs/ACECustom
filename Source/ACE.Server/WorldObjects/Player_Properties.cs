@@ -63,6 +63,15 @@ namespace ACE.Server.WorldObjects
             set { if (!value) RemoveProperty(PropertyBool.IsPsr); else SetProperty(PropertyBool.IsPsr, value); }
         }
 
+        /// <summary>
+        /// Opt-in: allow paying pyreals to restore one charge on an empty summoning essence when server config enables it (see PetDevice.ActOnUse).
+        /// </summary>
+        public bool PetDevicePyrealAutoRefillEnrolled
+        {
+            get => GetProperty(PropertyBool.PetDevicePyrealAutoRefillEnrolled) ?? false;
+            set { if (!value) RemoveProperty(PropertyBool.PetDevicePyrealAutoRefillEnrolled); else SetProperty(PropertyBool.PetDevicePyrealAutoRefillEnrolled, value); }
+        }
+
         public bool IsAdvocate
         {
             get => GetProperty(PropertyBool.IsAdvocate) ?? false;

@@ -1,9 +1,11 @@
 using System;
 using System.Linq;
 using ACE.Common;
+using ACE.Database;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
+using ACE.Entity.Models;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Factories;
 using ACE.Server.Managers;
@@ -784,81 +786,201 @@ namespace ACE.Server.Entity
                 player.SendTransientError("This captured appearance is corrupted.");
                 return;
             }
-            
-            // Consume item FIRST to prevent duplication (exploit)
+
+            // Snapshot everything before consume: TryConsumeFromInventoryWithNetworking destroys the item and its biota.
+            var capMotion = capturedItem.GetProperty(PropertyDataId.CapturedMotionTable);
+            var capSound = capturedItem.GetProperty(PropertyDataId.CapturedSoundTable);
+            var capPaletteBase = capturedItem.GetProperty(PropertyDataId.CapturedPaletteBase);
+            var capClothingBase = capturedItem.GetProperty(PropertyDataId.CapturedClothingBase);
+            var capPaletteTemplate = capturedItem.GetProperty(PropertyInt.CapturedPaletteTemplate);
+            var capShade = capturedItem.GetProperty(PropertyFloat.CapturedShade);
+            var capScale = capturedItem.GetProperty(PropertyFloat.CapturedScale);
+            var capCreatureName = capturedItem.GetProperty(PropertyString.CapturedCreatureName);
+            var capCreatureVariant = capturedItem.GetProperty(PropertyInt.CapturedCreatureVariant);
+            var capCapturedItems = capturedItem.GetProperty(PropertyString.CapturedItems);
+            var capCreatureType = capturedItem.GetProperty(PropertyInt.CapturedCreatureType);
+            var capAnimParts = capturedItem.GetProperty(PropertyString.CapturedObjDescAnimParts);
+            var capPalettes = capturedItem.GetProperty(PropertyString.CapturedObjDescPalettes);
+            var capTextures = capturedItem.GetProperty(PropertyString.CapturedObjDescTextures);
+            var capIconOverlay = capturedItem.IconOverlayId;
+            var capIconId = capturedItem.IconId;
+            var capAttuned = capturedItem.Attuned;
+            var capBonded = capturedItem.Bonded;
+
+            var nameBeforeApply = crate.Name;
+
+            // Consume item AFTER snapshot to prevent duplication (exploit)
             if (!player.TryConsumeFromInventoryWithNetworking(capturedItem, 1))
             {
                 player.SendTransientError("Failed to consume the essence.");
                 return;
             }
 
-            // Apply ALL visual properties to crate
+            var previousCapturedCreatureName = crate.VisualOverrideName;
+
+            // Apply ALL visual properties to crate (from snapshot only)
             crate.VisualOverrideSetup = setupId;
-            crate.VisualOverrideMotionTable = capturedItem.GetProperty(PropertyDataId.CapturedMotionTable);
-            crate.VisualOverrideSoundTable = capturedItem.GetProperty(PropertyDataId.CapturedSoundTable);
-            crate.VisualOverridePaletteBase = capturedItem.GetProperty(PropertyDataId.CapturedPaletteBase);
-            crate.VisualOverrideClothingBase = capturedItem.GetProperty(PropertyDataId.CapturedClothingBase);
+            crate.VisualOverrideMotionTable = capMotion;
+            crate.VisualOverrideSoundTable = capSound;
+            crate.VisualOverridePaletteBase = capPaletteBase;
+            crate.VisualOverrideClothingBase = capClothingBase;
             // Don't copy VisualOverrideIcon - we set the crate icon directly below
-            crate.VisualOverridePaletteTemplate = capturedItem.GetProperty(PropertyInt.CapturedPaletteTemplate);
-            crate.VisualOverrideShade = capturedItem.GetProperty(PropertyFloat.CapturedShade);
-            crate.VisualOverrideScale = capturedItem.GetProperty(PropertyFloat.CapturedScale);
-            crate.VisualOverrideName = capturedItem.GetProperty(PropertyString.CapturedCreatureName);
-            crate.VisualOverrideCreatureVariant = capturedItem.GetProperty(PropertyInt.CapturedCreatureVariant);
-            crate.VisualOverrideCapturedItems = capturedItem.GetProperty(PropertyString.CapturedItems);
-            crate.VisualOverrideCreatureType = capturedItem.GetProperty(PropertyInt.CapturedCreatureType);
-            
+            crate.VisualOverridePaletteTemplate = capPaletteTemplate;
+            crate.VisualOverrideShade = capShade;
+            crate.VisualOverrideScale = capScale;
+            crate.VisualOverrideName = capCreatureName;
+            crate.VisualOverrideCreatureVariant = capCreatureVariant;
+            crate.VisualOverrideCapturedItems = capCapturedItems;
+            crate.VisualOverrideCreatureType = capCreatureType;
+
             // Transfer ObjDesc properties for full humanoid appearance
             // IMPORTANT: Clear old values if new essence doesn't have them (prevents corruption when switching creature types)
-            var animParts = capturedItem.GetProperty(PropertyString.CapturedObjDescAnimParts);
-            if (!string.IsNullOrEmpty(animParts))
-                crate.SetProperty(PropertyString.CapturedObjDescAnimParts, animParts);
+            if (!string.IsNullOrEmpty(capAnimParts))
+                crate.SetProperty(PropertyString.CapturedObjDescAnimParts, capAnimParts);
             else
                 crate.RemoveProperty(PropertyString.CapturedObjDescAnimParts);
-            
-            var palettes = capturedItem.GetProperty(PropertyString.CapturedObjDescPalettes);
-            if (!string.IsNullOrEmpty(palettes))
-                crate.SetProperty(PropertyString.CapturedObjDescPalettes, palettes);
+
+            if (!string.IsNullOrEmpty(capPalettes))
+                crate.SetProperty(PropertyString.CapturedObjDescPalettes, capPalettes);
             else
                 crate.RemoveProperty(PropertyString.CapturedObjDescPalettes);
-            
-            var textures = capturedItem.GetProperty(PropertyString.CapturedObjDescTextures);
-            if (!string.IsNullOrEmpty(textures))
-                crate.SetProperty(PropertyString.CapturedObjDescTextures, textures);
+
+            if (!string.IsNullOrEmpty(capTextures))
+                crate.SetProperty(PropertyString.CapturedObjDescTextures, capTextures);
             else
                 crate.RemoveProperty(PropertyString.CapturedObjDescTextures);
-            
-            // Update the crate's icon: 0x060012F8 base + creature overlay from essence
-            crate.IconId = 0x060012F8;
-            
-            // Copy the creature icon overlay from the essence
-            if (capturedItem.IconOverlayId.HasValue && capturedItem.IconOverlayId.Value != 0)
+
+            var rebuiltName = PetDevice.BuildDisplayNameAfterCaptureApply(crate.Name, previousCapturedCreatureName, crate.VisualOverrideName);
+            if (!string.IsNullOrEmpty(rebuiltName))
+                crate.Name = rebuiltName;
+
+            SyncPetDeviceUseStringAfterSkinRename(crate, nameBeforeApply, crate.Name);
+
+            // Trade-lock + bond enrollment: combat pet essences only. Passive crates stay tradeable unless their weenie already says otherwise.
+            if (crate.IsCombatPetDevice())
             {
-                crate.IconOverlayId = capturedItem.IconOverlayId.Value;
+                if (capAttuned.HasValue)
+                    crate.Attuned = capAttuned;
+                if (capBonded.HasValue)
+                    crate.Bonded = capBonded;
+
+                if (ServerConfig.pet_bond_enabled.Value)
+                {
+                    crate.PetBondAttuned = true;
+                    crate.PetBondAttunedCharacterId = (long)player.Character.Id;
+                    if (crate.Attuned != AttunedStatus.Attuned)
+                        crate.Attuned = AttunedStatus.Attuned;
+                    if (crate.Bonded != BondedStatus.Bonded)
+                        crate.Bonded = BondedStatus.Bonded;
+                }
+            }
+
+            if (!crate.IsCombatPetDevice())
+            {
+                // Passive pet crate: composite inventory icon (crate base + creature overlay).
+                crate.IconId = 0x060012F8;
+
+                if (capIconOverlay.HasValue && capIconOverlay.Value != 0)
+                    crate.IconOverlayId = capIconOverlay.Value;
+                else
+                    crate.IconOverlayId = 0;
+
+                crate.RemoveProperty(PropertyDataId.IconUnderlay);
+                crate.RemoveProperty(PropertyInt.UiEffects);
+
+                log.Debug($"[MonsterCapture] Applied to passive crate: CrateIcon={crate.IconId:X}, CrateOverlay={crate.IconOverlayId}, EssenceIcon={capIconId:X}, EssenceOverlay={capIconOverlay}");
             }
             else
             {
-                crate.IconOverlayId = 0;
+                // Combat essence: keep template icon frame (shared overlay/underlay + UiEffects on many Naturalist essences).
+                // Only swap the center portrait to the siphoned creature — do not use passive crate base 0x060012F8.
+                var templateWeenie = DatabaseManager.World.GetCachedWeenie(crate.WeenieClassId);
+                if (templateWeenie != null)
+                {
+                    var tOverlay = templateWeenie.GetProperty(PropertyDataId.IconOverlay);
+                    if (tOverlay.HasValue && tOverlay.Value != 0)
+                        crate.IconOverlayId = tOverlay.Value;
+                    else
+                        crate.IconOverlayId = null;
+
+                    var tUnder = templateWeenie.GetProperty(PropertyDataId.IconUnderlay);
+                    if (tUnder.HasValue && tUnder.Value != 0)
+                        crate.IconUnderlayId = tUnder.Value;
+                    else
+                        crate.IconUnderlayId = null;
+
+                    var tUi = templateWeenie.GetProperty(PropertyInt.UiEffects);
+                    if (tUi.HasValue)
+                        crate.SetProperty(PropertyInt.UiEffects, tUi.Value);
+                    else
+                        crate.RemoveProperty(PropertyInt.UiEffects);
+                }
+
+                // Siphoned item (78780004): creature portrait is IconOverlayId; IconId is the template crystal.
+                // Center slot must use the overlay DID so the Naturalist frame (underlay + overlay from weenie) wraps the creature.
+                if (capIconOverlay.HasValue && capIconOverlay.Value != 0)
+                    crate.IconId = capIconOverlay.Value;
+                else if (capIconId != 0)
+                    crate.IconId = capIconId;
+
+                log.Debug($"[MonsterCapture] Applied to combat essence: Icon={crate.IconId:X}, Overlay={crate.IconOverlayId}, Underlay={crate.IconUnderlayId}, UiEffects={crate.UiEffects}, Name={crate.Name}");
             }
-            
-            // Clear properties from essence template that shouldn't be on the crate
-            crate.RemoveProperty(PropertyDataId.IconUnderlay);  // Don't copy underlay from essence
-            crate.RemoveProperty(PropertyInt.UiEffects);        // Don't copy purple outline from essence
-            
-            // Update client immediately using existing UpdateProperty method (same as /setproperty)
+
+            // Push name + icon stack to owner (required or client keeps stale template label/art until relog).
+            player.UpdateProperty(crate, PropertyString.Name, crate.Name ?? "");
+            var useStr = crate.GetProperty(PropertyString.Use);
+            if (useStr != null)
+                player.UpdateProperty(crate, PropertyString.Use, useStr);
             player.UpdateProperty(crate, PropertyDataId.Icon, crate.IconId);
-            if (crate.IconOverlayId.HasValue)
+            if (crate.IconOverlayId.HasValue && crate.IconOverlayId.Value != 0)
                 player.UpdateProperty(crate, PropertyDataId.IconOverlay, crate.IconOverlayId.Value);
             else
                 player.UpdateProperty(crate, PropertyDataId.IconOverlay, 0u);
-            
-            // Debug logging
-            log.Debug($"[MonsterCapture] Applied to Crate: CrateIcon={crate.IconId:X}, CrateOverlay={crate.IconOverlayId}, CrateUnderlay={crate.IconUnderlayId}, EssenceIcon={capturedItem.IconId:X}, EssenceOverlay={capturedItem.IconOverlayId}");
-            
+            player.UpdateProperty(crate, PropertyDataId.IconUnderlay, crate.IconUnderlayId ?? 0u);
+            player.UpdateProperty(crate, PropertyInt.UiEffects, (int)(crate.UiEffects ?? 0));
+            // Attuned/Bonded (and pet bond below) only for combat pet devices — passive crates keep existing trade rules.
+            if (crate.IsCombatPetDevice())
+            {
+                player.UpdateProperty(crate, PropertyInt.Attuned, (int?)crate.Attuned);
+                player.UpdateProperty(crate, PropertyInt.Bonded, (int?)crate.Bonded);
+            }
+            if (ServerConfig.pet_bond_enabled.Value && crate.IsCombatPetDevice())
+            {
+                player.UpdateProperty(crate, PropertyBool.PetBondAttuned, crate.PetBondAttuned);
+                player.UpdateProperty(crate, PropertyInt64.PetBondAttunedCharacterId, crate.PetBondAttunedCharacterId);
+            }
+
             // Save the crate with updated icons
             crate.SaveBiotaToDatabase();
             
             player.SendMessage($"You have applied the siphoned essence to your {crate.Name}!");
             player.SendMessage("Resummon your pet to see the new appearance!");
+        }
+
+        /// <summary>
+        /// Updates <see cref="PropertyString.Use"/> when the device display name's creature token changes
+        /// (e.g. "your Fire Maiden." → "your Fire Lich Oppressor.").
+        /// </summary>
+        private static void SyncPetDeviceUseStringAfterSkinRename(PetDevice crate, string nameBeforeApply, string nameAfterApply)
+        {
+            var use = crate.GetProperty(PropertyString.Use);
+            if (string.IsNullOrEmpty(use) || string.IsNullOrEmpty(nameBeforeApply) || string.IsNullOrEmpty(nameAfterApply))
+                return;
+
+            static string HeadBeforeEssence(string name)
+            {
+                var idx = name.LastIndexOf(" Essence", StringComparison.OrdinalIgnoreCase);
+                return idx < 0 ? name : name.Substring(0, idx);
+            }
+
+            var oldHead = HeadBeforeEssence(nameBeforeApply);
+            var newHead = HeadBeforeEssence(nameAfterApply);
+            if (string.IsNullOrEmpty(oldHead) || oldHead.Equals(newHead, StringComparison.Ordinal))
+                return;
+
+            var updated = use.Replace(oldHead, newHead, StringComparison.OrdinalIgnoreCase);
+            if (!string.Equals(updated, use, StringComparison.Ordinal))
+                crate.SetProperty(PropertyString.Use, updated);
         }
         
         public static bool IsCaptureCrystal(WorldObject wo)

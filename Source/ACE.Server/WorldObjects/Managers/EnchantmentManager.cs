@@ -540,6 +540,22 @@ namespace ACE.Server.WorldObjects.Managers
             return itemAugAmt;
         }
 
+        private static PropertiesEnchantmentRegistry CreateCooldownEnchantmentRegistry(int spellId, float durationSeconds, uint casterObjectId)
+        {
+            return new PropertiesEnchantmentRegistry
+            {
+                SpellId = spellId,
+                SpellCategory = (SpellCategory)SpellCategory_Cooldown,
+                HasSpellSetId = true,
+                Duration = durationSeconds,
+                CasterObjectId = casterObjectId,
+                DegradeLimit = -666,
+                StatModType = EnchantmentTypeFlags.Cooldown,
+                EnchantmentCategory = (uint)EnchantmentMask.Cooldown,
+                LayerId = 1      // cooldown at layer 1, any spells at layer 2?
+            };
+        }
+
         /// <summary>
         /// Adds a cooldown spell to the enchantment registry
         /// </summary>
@@ -549,24 +565,37 @@ namespace ACE.Server.WorldObjects.Managers
             if (cooldownID == null)
                 return false;
 
-            var newEntry = new PropertiesEnchantmentRegistry
-            {
-                // TODO: BiotaPropertiesEnchantmentRegistry.SpellId should be uint
-                SpellId = (int)GetCooldownSpellID(cooldownID.Value),
-                SpellCategory = (SpellCategory)SpellCategory_Cooldown,
-                HasSpellSetId = true,
-                Duration = item.CooldownDuration ?? 0.0f,
-                CasterObjectId = item.Guid.Full,
-                DegradeLimit = -666,
-                StatModType = EnchantmentTypeFlags.Cooldown,
-                EnchantmentCategory = (uint)EnchantmentMask.Cooldown,
-                LayerId = 1      // cooldown at layer 1, any spells at layer 2?
-            };
+            var newEntry = CreateCooldownEnchantmentRegistry(
+                (int)GetCooldownSpellID(cooldownID.Value),
+                (float)(item.CooldownDuration ?? 0.0),
+                item.Guid.Full);
             WorldObject.Biota.PropertiesEnchantmentRegistry.AddEnchantment(newEntry, WorldObject.BiotaDatabaseLock);
             WorldObject.ChangesDetected = true;
 
             Player.Session.Network.EnqueueSend(new GameEventMagicUpdateEnchantment(Player.Session, new Enchantment(Player, newEntry)));
 
+            return true;
+        }
+
+        /// <summary>
+        /// Like <see cref="StartCooldown"/> but with an explicit duration and caster guid (e.g. pet recall block on summoning device).
+        /// Replaces an existing cooldown enchantment with the same spell id and caster.
+        /// </summary>
+        public bool StartOrRefreshItemCooldown(uint casterItemGuid, int sharedCooldownId, float durationSeconds)
+        {
+            if (Player?.Session == null || durationSeconds <= 0)
+                return false;
+
+            var spellId = (int)GetCooldownSpellID(sharedCooldownId);
+            var existing = GetEnchantment((uint)spellId, casterItemGuid);
+            if (existing != null)
+                Remove(existing, sound: false);
+
+            var newEntry = CreateCooldownEnchantmentRegistry(spellId, durationSeconds, casterItemGuid);
+            WorldObject.Biota.PropertiesEnchantmentRegistry.AddEnchantment(newEntry, WorldObject.BiotaDatabaseLock);
+            WorldObject.ChangesDetected = true;
+
+            Player.Session.Network.EnqueueSend(new GameEventMagicUpdateEnchantment(Player.Session, new Enchantment(Player, newEntry)));
             return true;
         }
 

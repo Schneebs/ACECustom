@@ -741,5 +741,21 @@ namespace ACE.Server.WorldObjects
         {
             return GetQuestCountXPBonus() * GetXPAndLuminanceModifier(XpType.Kill) * GetEnglightenmentXPBonus();
         }
+
+        /// <summary>
+        /// Product of modifiers applied to kill XP in <see cref="EarnXP"/> before prestige / GrantXP
+        /// (server xp_modifier, equipment/aug kill bonus, quest count bonus, enlightenment, and hardcore when applicable).
+        /// </summary>
+        public double GetKillXpModifierProduct()
+        {
+            var modifier = ServerConfig.xp_modifier.Value;
+            var enchantment = GetXPAndLuminanceModifier(XpType.Kill);
+            var quest = GetQuestCountXPBonus();
+            var enlightenment = GetEnglightenmentXPBonus();
+            var product = modifier * enchantment * quest * enlightenment;
+            if (IsVPHardcore)
+                product *= 1.0 + ServerConfig.hardcore_xp_multiplier.Value;
+            return product;
+        }
     }
 }

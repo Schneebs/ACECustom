@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Globalization;
 
 namespace ACE.Entity.Enum.Properties
@@ -738,6 +738,7 @@ namespace ACE.Entity.Enum.Properties
         TimesJailed                             = 9044,
         /// <summary>Server/admin: UCM checks passed count (leaderboard stat).</summary>
         TimesUcmCheckPassed                     = 9045,
+
         /// <summary>
         /// Custom targeting behavior flags (<see cref="ACE.Entity.Enum.CustomTargetingBehavior"/>).
         /// </summary>
@@ -746,6 +747,11 @@ namespace ACE.Entity.Enum.Properties
         /// Bitmask of magic schools this creature suppresses for nearby players (see SpellSuppressionSchools).
         /// </summary>
         SpellSuppressionSchools                 = 9047,
+
+        /// <summary>Pet bond level stored on combat pet summoning essence (server/custom).</summary>
+        PetBondLevel                            = 9053,
+        /// <summary>DamageType copied from capture source for combat pet appearance/rules.</summary>
+        CapturedSourceDamageType                = 9054,
 
         // -- ILT Ability Charm System (50000-50099) ---------------------------------
         /// <summary>On an IsAbilityCharm item: integer key into CharmAbilityRegistry (1-50).</summary>
@@ -806,6 +812,7 @@ namespace ACE.Entity.Enum.Properties
                     return System.Enum.GetName(typeof(CreatureType), value);
                 case PropertyInt.DamageType:
                 case PropertyInt.ResistanceModifierType:
+                case PropertyInt.CapturedSourceDamageType:
                     return System.Enum.GetName(typeof(DamageType), value);
                 case PropertyInt.CurrentWieldedLocation:
                 case PropertyInt.ValidLocations:

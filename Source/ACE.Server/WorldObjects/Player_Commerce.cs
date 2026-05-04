@@ -364,5 +364,22 @@ namespace ACE.Server.WorldObjects
                 TryConsumeFromInventoryWithNetworking(currentWcid, (int)amount);
             }
         }
+
+        /// <summary>
+        /// Spend pyreals from inventory coin stacks then banked pyreals (same pools as CoinValue / vendors). Returns false if total wealth is insufficient.
+        /// </summary>
+        public bool TrySpendPyreals(long amount)
+        {
+            if (amount <= 0)
+                return true;
+
+            UpdateCoinValue(false);
+            if ((CoinValue ?? 0) < amount)
+                return false;
+
+            // CoinValue is int-capped; successful spend fits uint after the check above.
+            ConsumeCurrency(coinStackWcid, (uint)amount);
+            return true;
+        }
     }
 }

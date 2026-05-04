@@ -280,7 +280,9 @@ namespace ACE.Server.WorldObjects
             }
 
             if (spell.IsHarmful && this is Creature creatureCaster && targetCreature != null && targetCreature != creatureCaster && !creatureCaster.CanDamage(targetCreature))
+            {
                 return false;
+            }
 
             switch (spell.MetaSpellType)
             {
@@ -599,6 +601,47 @@ namespace ACE.Server.WorldObjects
                     //targetPlayer.Fellowship.OnVitalUpdate(targetPlayer);
 
                     break;
+            }
+
+            // Beneficial boost self-cast: apply healing that did not fit on the player (e.g. at full HP) to their active combat pet.
+            if (ServerConfig.pet_self_boost_overflow_to_combat_pet.Value
+                && player != null
+                && ReferenceEquals(player, targetCreature)
+                && spell.IsBeneficial
+                && minBoostValue > 0
+                && player.CurrentActivePet is CombatPet overflowPet
+                && overflowPet.IsAlive
+                && overflowPet.P_PetOwner == player)
+            {
+                var overflow = tryBoost - boost;
+                if (overflow > 0)
+                {
+                    int petApplied = 0;
+                    switch (spell.VitalDamageType)
+                    {
+                        case DamageType.Mana:
+                            petApplied = overflowPet.UpdateVitalDelta(overflowPet.Mana, overflow);
+                            break;
+                        case DamageType.Stamina:
+                            petApplied = overflowPet.UpdateVitalDelta(overflowPet.Stamina, overflow);
+                            break;
+                        default:
+                            petApplied = overflowPet.UpdateVitalDelta(overflowPet.Health, overflow);
+                            if (petApplied >= 0)
+                                overflowPet.DamageHistory.OnHeal((uint)petApplied);
+                            break;
+                    }
+                    if (petApplied > 0)
+                    {
+                        var vitalLabel = spell.VitalDamageType switch
+                        {
+                            DamageType.Mana => "mana",
+                            DamageType.Stamina => "stamina",
+                            _ => "healing",
+                        };
+                        player.SendChatMessage(player, $"{overflowPet.Name} receives {petApplied} excess {vitalLabel} from {spell.Name}.", ChatMessageType.Magic);
+                    }
+                }
             }
 
             if (player != null && minBoostValue < 0 && spell.VitalDamageType == DamageType.Health)
