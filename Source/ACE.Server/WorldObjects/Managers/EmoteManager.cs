@@ -49,6 +49,7 @@ namespace ACE.Server.WorldObjects.Managers
         public int Nested { get; set; }
 
         public bool Debug = false;
+        private readonly HashSet<string> _singleLocalBroadcastsSent = new HashSet<string>();
 
         public EmoteManager(WorldObject worldObject)
         {
@@ -1136,6 +1137,15 @@ namespace ACE.Server.WorldObjects.Managers
 
                     message = Replace(emote.Message, WorldObject, targetObject, emoteSet.Quest);
                     WorldObject.EnqueueBroadcast(new GameMessageSystemChat(message, ChatMessageType.Broadcast));
+                    break;
+
+                case EmoteType.SingleLocalBroadcast:
+
+                    if (TryMarkSingleLocalBroadcastSent(emoteSet, emote))
+                    {
+                        message = Replace(emote.Message, WorldObject, targetObject, emoteSet.Quest);
+                        WorldObject.EnqueueBroadcast(new GameMessageSystemChat(message, ChatMessageType.Broadcast));
+                    }
                     break;
 
                 case EmoteType.LocalSignal:
@@ -3648,6 +3658,7 @@ namespace ACE.Server.WorldObjects.Managers
         /// </summary>
         public void OnWakeUp(Creature target)
         {
+            ResetSingleLocalBroadcasts();
             ExecuteEmoteSet(EmoteCategory.Scream, null, target);
         }
 
@@ -3829,6 +3840,19 @@ namespace ACE.Server.WorldObjects.Managers
         public void OnHomeSick(WorldObject attackTarget)
         {
             ExecuteEmoteSet(EmoteCategory.Homesick, null, attackTarget);
+        }
+
+        public void ResetSingleLocalBroadcasts()
+        {
+            _singleLocalBroadcastsSent.Clear();
+        }
+
+        private bool TryMarkSingleLocalBroadcastSent(PropertiesEmote emoteSet, PropertiesEmoteAction emote)
+        {
+            // Use per-instance references to avoid collisions from reused DatabaseRecordId values
+            // in dynamic emotes (action ids commonly start at 1 for each dynamic emote set).
+            var key = $"instance:{RuntimeHelpers.GetHashCode(emoteSet)}:{RuntimeHelpers.GetHashCode(emote)}";
+            return _singleLocalBroadcastsSent.Add(key);
         }
 
         /// <summary>

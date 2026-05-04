@@ -193,8 +193,8 @@ namespace ACE.Entity.Enum.Properties
         [AssessmentProperty]
         SplitArrows                      = 9030,
         IsSplitArrow                     = 9031,
-        [Ephemeral]
         LastHitWasSplitArrow             = 9032,
+        IsSplitArrowKill                 = 9033,
         [AssessmentProperty]
         IsCharm                          = 9040,
         AllowFriendlyPlayerDamage       = 9043,
@@ -241,12 +241,15 @@ namespace ACE.Entity.Enum.Properties
         /// Single-use, extremely rare item obtained by exchanging 5000 Flawed Siphon Lenses.
         /// </summary>
         IsGuaranteedCaptureLens           = 9042,
-
         /// <summary>If TRUE, item has unlimited uses and will never be consumed.</summary>
         [AssessmentProperty]
         InfiniteCharges                   = 9045,
+        /// <summary>
+        /// If TRUE, this world object suppresses configured spell schools even when not awake/aggro.
+        /// </summary>
+        IsPassiveSpellSuppressor          = 9046,
 
-        // ── ILT Ability Charm System (50000–50099) ────────────────────────────────
+        // -- ILT Ability Charm System (50000-50099) ---------------------------------
         /// <summary>On an ability charm item: marks it as an ability-granting charm.</summary>
         IsAbilityCharm   = 50000,
         /// <summary>On an ability charm item: true when the charm has been activated/consumed.</summary>
@@ -254,7 +257,7 @@ namespace ACE.Entity.Enum.Properties
         /// <summary>On an ability charm item: true for limited trial charms that expire.</summary>
         IsTestCharm      = 50002,
 
-        // ── ILT Ability Flags — players (50010+) ─────────────────────────────────
+        // -- ILT Ability Flags - players (50010+) ------------------------------------
         /// <summary>Player has the Mana Barrier ability active (absorbs damage using mana).</summary>
         HasManaBarrier   = 50010,
 
@@ -276,7 +279,7 @@ namespace ACE.Entity.Enum.Properties
         /// <summary>ILT Player Pref: Show [Overkill] suffix on kill/death messages. Default ON.</summary>
         ShowOverkill = 50029,
 
-        // ── ILT Player UI Preferences → see PropertyInt.DamageNumberFormat (50101) ───
+        // -- ILT Player UI Preferences -> see PropertyInt.DamageNumberFormat (50101) --
     }
 }
 

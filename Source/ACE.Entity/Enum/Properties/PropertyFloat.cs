@@ -268,5 +268,9 @@ namespace ACE.Entity.Enum.Properties
         /// </summary>
         [AssessmentProperty]
         DamageCapMultiplier = 9045,
+        /// <summary>
+        /// Optional radius for spell suppression zones. When <= 0 or unset, creatures fall back to VisualAwarenessRange.
+        /// </summary>
+        SpellSuppressionRadius = 9046,
     }
 }

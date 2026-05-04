@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 
 namespace ACE.Entity.Enum.Properties
@@ -742,9 +742,13 @@ namespace ACE.Entity.Enum.Properties
         /// Custom targeting behavior flags (<see cref="ACE.Entity.Enum.CustomTargetingBehavior"/>).
         /// </summary>
         TargetingFlags                          = 9046,
+        /// <summary>
+        /// Bitmask of magic schools this creature suppresses for nearby players (see SpellSuppressionSchools).
+        /// </summary>
+        SpellSuppressionSchools                 = 9047,
 
-        // ── ILT Ability Charm System (50000–50099) ────────────────────────────────
-        /// <summary>On an IsAbilityCharm item: integer key into CharmAbilityRegistry (1–50).</summary>
+        // -- ILT Ability Charm System (50000-50099) ---------------------------------
+        /// <summary>On an IsAbilityCharm item: integer key into CharmAbilityRegistry (1-50).</summary>
         CharmGrantsAbility = 50000,
 
         /// <summary>On a charm item: the tier/level of the charm (1, 2, 3).</summary>
@@ -753,7 +757,7 @@ namespace ACE.Entity.Enum.Properties
         /// <summary>On a player: the level of the currently active charm.</summary>
         ActiveCharmLevel = 50016,
 
-        // ── ILT Player UI Preferences (50101+) ──────────────────────────────────
+        // -- ILT Player UI Preferences (50101+) --------------------------------------
         /// <summary>
         /// Player's damage number display mode.
         /// 0 = Default (vanilla, no formatting)
@@ -908,6 +912,9 @@ namespace ACE.Entity.Enum.Properties
                 case PropertyInt.UseRequiresSkillSpec:
                 case PropertyInt.SkillToBeAltered:
                     return System.Enum.GetName(typeof(Skill), value);
+
+                case PropertyInt.SpellSuppressionSchools:
+                    return System.Enum.GetName(typeof(SpellSuppressionSchools), value);
 
                 case PropertyInt.HookGroup:
                     return System.Enum.GetName(typeof(HookGroupType), value);

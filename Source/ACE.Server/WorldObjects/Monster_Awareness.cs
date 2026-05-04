@@ -142,6 +142,7 @@ namespace ACE.Server.WorldObjects
             CurrentAttack = null;
             firstUpdate = true;
             AttackTarget = null;
+            EmoteManager.ResetSingleLocalBroadcasts();
             IsAwake = false;
             IsMoving = false;
             MonsterState = State.Idle;

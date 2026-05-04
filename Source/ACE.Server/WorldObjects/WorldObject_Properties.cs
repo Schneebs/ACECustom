@@ -2075,6 +2075,59 @@ namespace ACE.Server.WorldObjects
             set { if (string.IsNullOrEmpty(value)) RemoveProperty(PropertyString.FriendlyQuestString); else SetProperty(PropertyString.FriendlyQuestString, value); }
         }
 
+        /// <summary>
+        /// Bitmask of spell schools this creature suppresses for nearby players.
+        /// </summary>
+        public SpellSuppressionSchools SpellSuppressionSchools
+        {
+            get => (SpellSuppressionSchools)(GetProperty(PropertyInt.SpellSuppressionSchools) ?? 0);
+            set { if (value == SpellSuppressionSchools.None) RemoveProperty(PropertyInt.SpellSuppressionSchools); else SetProperty(PropertyInt.SpellSuppressionSchools, (int)value); }
+        }
+
+        /// <summary>
+        /// If TRUE, this source suppresses configured spell schools even when not awake/aggro.
+        /// </summary>
+        public bool? IsPassiveSpellSuppressor
+        {
+            get => GetProperty(PropertyBool.IsPassiveSpellSuppressor);
+            set { if (!value.HasValue) RemoveProperty(PropertyBool.IsPassiveSpellSuppressor); else SetProperty(PropertyBool.IsPassiveSpellSuppressor, value.Value); }
+        }
+
+        /// <summary>
+        /// Optional suppression radius for this source. For creatures, unset or non-positive falls back to VisualAwarenessRange.
+        /// </summary>
+        public double? SpellSuppressionRadius
+        {
+            get => GetProperty(PropertyFloat.SpellSuppressionRadius);
+            set
+            {
+                if (!value.HasValue || value.Value <= 0 || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+                    RemoveProperty(PropertyFloat.SpellSuppressionRadius);
+                else
+                    SetProperty(PropertyFloat.SpellSuppressionRadius, value.Value);
+            }
+        }
+
+        /// <summary>
+        /// Optional custom message shown to players when a nearby suppression source blocks a spell cast.
+        /// Supports {school} and {source} placeholders.
+        /// </summary>
+        public string SpellSuppressionMessage
+        {
+            get
+            {
+                var v = GetProperty(PropertyString.SpellSuppressionMessage);
+                return string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+            }
+            set
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                    RemoveProperty(PropertyString.SpellSuppressionMessage);
+                else
+                    SetProperty(PropertyString.SpellSuppressionMessage, value.Trim());
+            }
+        }
+
         public bool? AllowFriendlyPlayerDamage
         {
             get => GetProperty(PropertyBool.AllowFriendlyPlayerDamage);
