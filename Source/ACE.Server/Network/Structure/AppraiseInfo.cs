@@ -260,6 +260,32 @@ namespace ACE.Server.Network.Structure
                 PropertiesInt.Remove(PropertyInt.EncumbranceVal);
             }
 
+            // Pet Bonding System - display bond info on PetDevice appraisal
+            // This is intentionally done in appraisal output (not persisted to wo.LongDesc).
+            if (wo is ACE.Server.WorldObjects.PetDevice petDevice && petDevice.IsCombatPetDevice())
+            {
+                // Show only when the pet device is attuned OR has any bond fields set.
+                var isAttuned = petDevice.IsPetBondAttuned;
+                var bondLevel = petDevice.PetBondLevel;
+                var bondXp = petDevice.PetBondXp;
+
+                if (isAttuned || bondLevel.HasValue || bondXp.HasValue)
+                {
+                    var level = bondLevel.GetValueOrDefault();
+                    var xp = bondXp.GetValueOrDefault();
+
+                    // Keep wording player-friendly; avoid implementation details.
+                    var msg = isAttuned
+                        ? $"Bond Level: {level:N0}\nBond XP: {xp:N0}"
+                        : $"Bond (unattuned)\nBond Level: {level:N0}\nBond XP: {xp:N0}";
+
+                    if (PropertiesString.ContainsKey(PropertyString.LongDesc))
+                        PropertiesString[PropertyString.LongDesc] += $"\n\n{msg}";
+                    else
+                        PropertiesString[PropertyString.LongDesc] = msg;
+                }
+            }
+
             if (wo is SlumLord slumLord)
             {                
                 PropertiesBool.Clear();

@@ -68,6 +68,11 @@ namespace ACE.Server.WorldObjects
             RecipeManager.UseObjectOnTarget(player, this, target);
         }
 
+        /// <summary>
+        /// If false, successful activation will not start the item cooldown enchantment (subtypes may override).
+        /// </summary>
+        protected virtual bool ShouldApplyActivationCooldown(Player player) => true;
+
         public virtual void OnActivate(WorldObject activator)
         {
             //Console.WriteLine($"{Name}.OnActivate({activator.Name})");
@@ -93,7 +98,7 @@ namespace ACE.Server.WorldObjects
                 return;
             }
 
-            if (player != null)
+            if (player != null && ShouldApplyActivationCooldown(player))
                 player.EnchantmentManager.StartCooldown(this);
 
             // perform motion animation - rarely used (only 4 instances in PY16 db)

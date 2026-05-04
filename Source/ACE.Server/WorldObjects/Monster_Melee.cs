@@ -98,6 +98,9 @@ namespace ACE.Server.WorldObjects
 
                     var damageEvent = DamageEvent.CalculateDamage(this, target, weapon, motionCommand, attackFrames[0].attackHook);
 
+                    if (combatPet != null && combatPet.MeleeMotionDpsFactor != 1f && damageEvent.HasDamage)
+                        damageEvent.Damage *= combatPet.MeleeMotionDpsFactor;
+
                     //var damage = CalculateDamage(ref damageType, maneuver, bodyPart, ref critical, ref shieldMod);
 
                     if (damageEvent.HasDamage)
@@ -109,6 +112,9 @@ namespace ACE.Server.WorldObjects
 
                             // this is a player taking damage
                             targetPlayer.TakeDamage(this, damageEvent);
+
+                            if (combatPet != null)
+                                CombatPet.TryNotifyOwnerOutgoingPhysical(combatPet, targetPlayer, damageEvent.Damage, damageEvent.DamageType, "Melee");
 
                             if (damageEvent.ShieldMod != 1.0f)
                             {
@@ -125,6 +131,9 @@ namespace ACE.Server.WorldObjects
                             // combat pet inflicting or receiving damage
                             //Console.WriteLine($"{target.Name} taking {Math.Round(damage)} {damageType} damage from {Name}");
                             target.TakeDamage(this, damageEvent.DamageType, damageEvent.Damage);
+
+                            if (combatPet != null)
+                                CombatPet.TryNotifyOwnerOutgoingPhysical(combatPet, target, damageEvent.Damage, damageEvent.DamageType, "Melee");
 
                             EmitSplatter(target, damageEvent.Damage);
 
@@ -151,16 +160,23 @@ namespace ACE.Server.WorldObjects
                                     continue;
 
                                 var cleaveDamageEvent = DamageEvent.CalculateDamage(this, cleaveHit, weapon, motionCommand, attackFrames[0].attackHook);
+
+                                if (combatPet != null && combatPet.MeleeMotionDpsFactor != 1f && cleaveDamageEvent.HasDamage)
+                                    cleaveDamageEvent.Damage *= combatPet.MeleeMotionDpsFactor;
                                 
                                 if (cleaveDamageEvent.HasDamage)
                                 {
                                     if (cleaveHit is Player cleavePlayer)
                                     {
                                         cleavePlayer.TakeDamage(this, cleaveDamageEvent);
+                                        if (combatPet != null)
+                                            CombatPet.TryNotifyOwnerOutgoingPhysical(combatPet, cleavePlayer, cleaveDamageEvent.Damage, cleaveDamageEvent.DamageType, "Melee (cleave)");
                                     }
                                     else
                                     {
                                         cleaveHit.TakeDamage(this, cleaveDamageEvent.DamageType, cleaveDamageEvent.Damage);
+                                        if (combatPet != null)
+                                            CombatPet.TryNotifyOwnerOutgoingPhysical(combatPet, cleaveHit, cleaveDamageEvent.Damage, cleaveDamageEvent.DamageType, "Melee (cleave)");
                                         EmitSplatter(cleaveHit, cleaveDamageEvent.Damage);
                                     }
                                 }

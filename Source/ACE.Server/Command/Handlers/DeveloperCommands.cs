@@ -1918,6 +1918,24 @@ namespace ACE.Server.Command.Handlers
                 return;
             }
 
+            // Pet Bonding System - restrict bond properties to combat pet devices only
+            bool isPetBondProp =
+                (propType.Equals("PropertyBool", StringComparison.OrdinalIgnoreCase) && (PropertyBool)result == PropertyBool.PetBondAttuned) ||
+                (propType.Equals("PropertyInt", StringComparison.OrdinalIgnoreCase) && (PropertyInt)result == PropertyInt.PetBondLevel) ||
+                (propType.Equals("PropertyInt64", StringComparison.OrdinalIgnoreCase) && (
+                    (PropertyInt64)result == PropertyInt64.PetBondXp ||
+                    (PropertyInt64)result == PropertyInt64.PetBondXpTotal ||
+                    (PropertyInt64)result == PropertyInt64.PetBondAttunedCharacterId));
+
+            if (isPetBondProp)
+            {
+                if (target is not ACE.Server.WorldObjects.PetDevice petDevice || !petDevice.IsCombatPetDevice())
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat($"{prop} can only be set on CombatPet devices.", ChatMessageType.Broadcast));
+                    return;
+                }
+            }
+
             if (propType.Equals("PropertyDataId", StringComparison.OrdinalIgnoreCase))
             {
                 if ((PropertyDataId)result == PropertyDataId.CreatedByAccountId)

@@ -5,6 +5,7 @@ using System.Linq;
 using log4net;
 
 using ACE.Database;
+using ACE.DatLoader;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
@@ -29,6 +30,206 @@ namespace ACE.Server.WorldObjects
         {
             get => GetProperty(PropertyInt.PetClass);
             set { if (value.HasValue) SetProperty(PropertyInt.PetClass, value.Value); else RemoveProperty(PropertyInt.PetClass); }
+        }
+
+        // Pet Bonding System - Stored on the device (not the spawned pet)
+        public bool? PetBondAttuned
+        {
+            get => GetProperty(PropertyBool.PetBondAttuned);
+            set { if (!value.HasValue) RemoveProperty(PropertyBool.PetBondAttuned); else SetProperty(PropertyBool.PetBondAttuned, value.Value); }
+        }
+
+        public int? PetBondLevel
+        {
+            get => GetProperty(PropertyInt.PetBondLevel);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.PetBondLevel); else SetProperty(PropertyInt.PetBondLevel, value.Value); }
+        }
+
+        public long? PetBondXp
+        {
+            get => GetProperty(PropertyInt64.PetBondXp);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.PetBondXp); else SetProperty(PropertyInt64.PetBondXp, value.Value); }
+        }
+
+        public long? PetBondXpTotal
+        {
+            get => GetProperty(PropertyInt64.PetBondXpTotal);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.PetBondXpTotal); else SetProperty(PropertyInt64.PetBondXpTotal, value.Value); }
+        }
+
+        public long? PetBondAttunedCharacterId
+        {
+            get => GetProperty(PropertyInt64.PetBondAttunedCharacterId);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt64.PetBondAttunedCharacterId); else SetProperty(PropertyInt64.PetBondAttunedCharacterId, value.Value); }
+        }
+
+        public bool IsPetBondAttuned => PetBondAttuned ?? false;
+
+        /// <summary>
+        /// Returns true if this device summons a CombatPet (WeenieType.CombatPet).
+        /// Used to scope Pet Bonding to combat pet devices only.
+        /// </summary>
+        public bool IsCombatPetDevice()
+        {
+            if (!PetClass.HasValue || PetClass.Value <= 0)
+                return false;
+
+            // Use cached weenie data; PetClass points at the summon weenie.
+            var weenie = DatabaseManager.World.GetCachedWeenie((uint)PetClass.Value);
+            if (weenie == null)
+                return false;
+
+            return weenie.WeenieType == WeenieType.CombatPet;
+        }
+
+        /// <summary>
+        /// Bond-derived combat bonuses for a summoned CombatPet (additive on top of gem gear ratings).
+        /// DR uses (level+2)/3; CDR/CD ramp linearly 0→cap over bond level cap; D uses the agreed low-level table then +1 per 3 levels from 15+.
+        /// Vitality bonus is bondLevel × pet_bond_vitality_per_level (applied as flat max health in CombatPet.Init).
+        /// </summary>
+        public static void GetBondCombatStatBonuses(int bondLevel, int levelCap, out int damageResistRating, out int critDamageResistRating, out int damageRating, out int critDamageRating, out int vitalityToMaxHealth)
+        {
+            damageResistRating = 0;
+            critDamageResistRating = 0;
+            damageRating = 0;
+            critDamageRating = 0;
+            vitalityToMaxHealth = 0;
+
+            if (bondLevel < 0)
+                bondLevel = 0;
+
+            if (levelCap < 1)
+                levelCap = 1;
+
+            if (bondLevel > levelCap)
+                bondLevel = levelCap;
+
+            damageResistRating = (bondLevel + 2) / 3;
+
+            var cdrCap = (int)ServerConfig.pet_bond_cdr_cap.Value;
+            var cdCap = (int)ServerConfig.pet_bond_cd_cap.Value;
+            if (cdrCap < 0)
+                cdrCap = 0;
+            if (cdCap < 0)
+                cdCap = 0;
+
+            critDamageResistRating = (int)Math.Min(cdrCap, (long)bondLevel * cdrCap / levelCap);
+            critDamageRating = (int)Math.Min(cdCap, (long)bondLevel * cdCap / levelCap);
+
+            damageRating = GetBondDamageRatingBonus(bondLevel);
+
+            var vitPer = (int)ServerConfig.pet_bond_vitality_per_level.Value;
+            if (vitPer < 0)
+                vitPer = 0;
+            vitalityToMaxHealth = bondLevel * vitPer;
+        }
+
+        private static int GetBondDamageRatingBonus(int L)
+        {
+            if (L < 3)
+                return 0;
+            if (L <= 6)
+                return 1;
+            if (L <= 8)
+                return 2;
+            if (L <= 11)
+                return 3;
+            if (L <= 14)
+                return 4;
+            return 5 + (L - 15) / 3;
+        }
+
+        public static long GetBondXpToNextLevel(int currentLevel)
+        {
+            // Match the player's level XP curve (retail table through 275, dynamic progression beyond).
+            var lvl = Math.Max(1, currentLevel);
+
+            if (lvl >= 275)
+            {
+                var a = Player.GenerateDynamicLevelPostMax(lvl);
+                var b = Player.GenerateDynamicLevelPostMax(lvl + 1);
+                var delta = b - a;
+                if (delta < 1) delta = 1;
+                if (delta > long.MaxValue) delta = long.MaxValue;
+                return (long)Math.Round(delta);
+            }
+
+            var xpTable = DatManager.PortalDat.XpTable.CharacterLevelXPList;
+            var maxIndex = xpTable.Count - 1;
+            if (maxIndex <= 1)
+                return 1;
+
+            var aIdx = Math.Clamp(lvl, 1, maxIndex - 1);
+            var bIdx = aIdx + 1;
+
+            var deltaTable = (long)xpTable[bIdx] - (long)xpTable[aIdx];
+            return Math.Max(1, deltaTable);
+        }
+
+        public bool TryAwardBondXp(Player owner, long amount, out bool leveledUp)
+        {
+            leveledUp = false;
+
+            if (amount <= 0)
+                return false;
+
+            if (!ServerConfig.pet_bond_enabled.Value)
+                return false;
+
+            if (!IsCombatPetDevice() || !IsPetBondAttuned)
+                return false;
+
+            var bondedCharacterId = PetBondAttunedCharacterId;
+            if (bondedCharacterId.HasValue && owner != null && bondedCharacterId.Value != (long)owner.Character.Id)
+                return false;
+
+            var levelCap = (int)ServerConfig.pet_bond_level_cap.Value;
+            if (levelCap < 1) levelCap = 1;
+
+            var level = PetBondLevel.GetValueOrDefault(1);
+            if (level < 1) level = 1;
+
+            var xp = PetBondXp.GetValueOrDefault(0);
+            var total = PetBondXpTotal.GetValueOrDefault(0);
+
+            xp += amount;
+            total += amount;
+
+            while (level < levelCap)
+            {
+                var xpToNext = GetBondXpToNextLevel(level);
+                if (xp < xpToNext)
+                    break;
+
+                xp -= xpToNext;
+                level++;
+                leveledUp = true;
+            }
+
+            PetBondLevel = level;
+            PetBondXp = xp;
+            PetBondXpTotal = total;
+
+            SaveBiotaToDatabase();
+
+            // Best-effort immediate client updates (appraisal already shows it; this makes it feel responsive).
+            if (owner != null)
+            {
+                owner.UpdateProperty(this, PropertyInt.PetBondLevel, level, true);
+                owner.UpdateProperty(this, PropertyInt64.PetBondXp, xp, true);
+                owner.UpdateProperty(this, PropertyInt64.PetBondXpTotal, total, true);
+            }
+
+            // Same level-up play script as players (Player_Xp), on the spawned pet so it shows in-world for nearby clients.
+            if (leveledUp && owner != null
+                && owner.CurrentActivePet is CombatPet bondPet
+                && bondPet.SummoningDeviceGuid == Guid
+                && bondPet.PhysicsObj != null)
+            {
+                bondPet.PlayParticleEffect(PlayScript.LevelUp, bondPet.Guid);
+            }
+
+            return true;
         }
 
         // Monster Capture System - Visual Override Properties
@@ -146,6 +347,86 @@ namespace ACE.Server.WorldObjects
         {
         }
 
+        protected override bool ShouldApplyActivationCooldown(Player player)
+        {
+            if (ServerConfig.pet_summon_cooldown_on_pet_death_only.Value && IsCombatPetDevice())
+                return false;
+
+            return base.ShouldApplyActivationCooldown(player);
+        }
+
+        /// <summary>
+        /// Strips chained "Owner's " style prefixes from a stored capture name (same rules as summon naming).
+        /// </summary>
+        public static string StripCapturedCreatureNamePrefixes(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+
+            var baseName = name;
+            int apostropheIdx;
+            while ((apostropheIdx = baseName.IndexOf("'s ")) > 0)
+                baseName = baseName.Substring(apostropheIdx + 3);
+
+            return baseName.Trim();
+        }
+
+        /// <summary>
+        /// Rebuilds pet device inventory name after applying a new capture skin: keeps the prefix before the
+        /// creature token and the " Essence..." suffix (e.g. "Lightning Maiden Essence" → "Lightning Floeshark Essence").
+        /// When a previous <see cref="VisualOverrideName"/> exists, it is stripped from the head for a reliable prefix;
+        /// otherwise the last word of the head is treated as the template creature token (works for "Lightning Maiden").
+        /// </summary>
+        public static string BuildDisplayNameAfterCaptureApply(string currentDeviceName, string previousCapturedCreatureName, string newCapturedCreatureName)
+        {
+            if (string.IsNullOrEmpty(currentDeviceName))
+                return currentDeviceName;
+
+            var newMid = StripCapturedCreatureNamePrefixes(newCapturedCreatureName);
+            if (string.IsNullOrEmpty(newMid))
+                return currentDeviceName;
+
+            var idx = currentDeviceName.LastIndexOf(" Essence", StringComparison.OrdinalIgnoreCase);
+            if (idx < 0)
+                return currentDeviceName;
+
+            var tail = currentDeviceName.Substring(idx);
+            var head = currentDeviceName.Substring(0, idx);
+            var oldMid = StripCapturedCreatureNamePrefixes(previousCapturedCreatureName ?? "");
+
+            string prefix;
+            if (!string.IsNullOrEmpty(oldMid) && head.EndsWith(oldMid, StringComparison.OrdinalIgnoreCase))
+                prefix = head.Substring(0, head.Length - oldMid.Length).TrimEnd();
+            else
+            {
+                var parts = head.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2)
+                    prefix = string.Join(" ", parts, 0, parts.Length - 1);
+                else
+                    prefix = "";
+            }
+
+            if (string.IsNullOrEmpty(prefix))
+                return newMid + tail;
+
+            return $"{prefix} {newMid}{tail}";
+        }
+
+        /// <summary>
+        /// Display name for bond/progress messages: uses capture rename (VisualOverrideName) with the device tier suffix (e.g. " Essence (80)").
+        /// </summary>
+        public string GetBondMessageDisplayName()
+        {
+            if (string.IsNullOrEmpty(VisualOverrideName))
+                return Name;
+
+            var essenceIdx = Name.LastIndexOf(" Essence", StringComparison.OrdinalIgnoreCase);
+            var tail = essenceIdx >= 0 ? Name.Substring(essenceIdx) : "";
+
+            var baseName = StripCapturedCreatureNamePrefixes(VisualOverrideName);
+
+            return string.IsNullOrEmpty(tail) ? baseName : baseName + tail;
+        }
+
         // Monster Capture System - Handle captured appearance application
         public override void HandleActionUseOnTarget(Player player, WorldObject target)
         {
@@ -175,6 +456,25 @@ namespace ACE.Server.WorldObjects
             if (!(activator is Player player))
                 return;
 
+            // Pet Bonding System - character-bound combat pet devices
+            if (ServerConfig.pet_bond_enabled.Value && IsCombatPetDevice() && IsPetBondAttuned)
+            {
+                var bondedCharacterId = PetBondAttunedCharacterId;
+                if (bondedCharacterId.HasValue && bondedCharacterId.Value != (long)player.Character.Id)
+                {
+                    player.SendTransientError("This pet device is bonded to another character.");
+                    return;
+                }
+
+                // Ensure legacy/admin-attuned devices get the standard "no trade/drop" flags.
+                if (Attuned != AttunedStatus.Attuned || Bonded != BondedStatus.Bonded)
+                {
+                    Attuned = AttunedStatus.Attuned;
+                    Bonded = BondedStatus.Bonded;
+                    SaveBiotaToDatabase();
+                }
+            }
+
             // Good PCAP example of using a PetDevice to summon a pet:
             // Asherons-Call-packets-includes-3-towers\pkt_2017-1-30_1485823896_log.pcap lines 27837 - 27843
 
@@ -186,16 +486,19 @@ namespace ACE.Server.WorldObjects
 
             if (Structure == 0)
             {
-                //player.Session.Network.EnqueueSend(new GameEventCommunicationTransientString(player.Session, "You must refill the essence to use it again."));
-                player.Session.Network.EnqueueSend(new GameMessageSystemChat("Your summoning device does not have enough charges to function!", ChatMessageType.Broadcast));
-                return;
+                if (!TryApplyPyrealAutoRefillBeforeSummon(player))
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat("Your summoning device does not have enough charges to function!", ChatMessageType.Broadcast));
+                    return;
+                }
             }
 
             var wcid = (uint)PetClass;
 
             var result = SummonCreature(player, wcid);
 
-            if (result == null || result.Value)
+            // Only consume a charge on a successful summon. (SummonCreature returns null when Init aborts; treating null as success wrongly decremented structure.)
+            if (result == true)
             {
                 // CombatPet devices should always have structure
                 if (Structure != null)
@@ -228,32 +531,8 @@ namespace ACE.Server.WorldObjects
                 return new ActivationResult(false);
             }
 
-            // duplicating some of this verification logic here from Pet.Init()
-            // since the PetDevice owner and the summoned Pet are separate objects w/ potentially different heartbeat offsets,
-            // the cooldown can still expire before the CombatPet's lifespan
-            // in this case, if the player tries to re-activate the PetDevice while the CombatPet is still in the world,
-            // we want to return an error without re-activating the cooldown
-
-            if (player.CurrentActivePet != null && player.CurrentActivePet is CombatPet)
-            {
-                if (ServerConfig.pet_stow_replace.Value)
-                {
-                    // original ace
-                    player.SendTransientError($"{player.CurrentActivePet.Name} is already active");
-                    return new ActivationResult(false);
-                }
-                else
-                {
-                    // retail stow
-                    var weenie = DatabaseManager.World.GetCachedWeenie((uint)PetClass);
-
-                    if (weenie == null || weenie.WeenieType != WeenieType.Pet)
-                    {
-                        player.SendTransientError($"{player.CurrentActivePet.Name} is already active");
-                        return new ActivationResult(false);
-                    }
-                }
-            }
+            // While a CombatPet is active, summoning another creature goes through Pet.Init -> HandleCurrentActivePet
+            // (replace/stow rules). Do not block unrelated PetDevice uses (e.g. inventory crates misclassified as PetDevice).
             return new ActivationResult(true);
         }
 
@@ -392,6 +671,8 @@ namespace ACE.Server.WorldObjects
                             var item = WorldObjectFactory.CreateNewWorldObject(itemWcid);
                             if (item != null)
                             {
+                                CombatPet.StripVisualWeaponDamageStats(item);
+
                                 // Apply Visual Properties - scale items by pet's scale ratio
                                 if (parts.Length > 1 && float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var itemScale))
                                 {
@@ -855,6 +1136,51 @@ namespace ACE.Server.WorldObjects
         public static bool IsEncapsulatedSpirit(WorldObject wo)
         {
             return wo.WeenieClassId == 49485;
+        }
+
+        /// <summary>
+        /// When <see cref="PropertyInt.Structure"/> is 0, optionally restores one charge if the server allows pyreal auto-refill,
+        /// the player has enrolled (<see cref="PropertyBool.PetDevicePyrealAutoRefillEnrolled"/>), and the configured cost is not negative
+        /// (0 = free, &gt; 0 = must be able to pay).
+        /// Returns true if the device now has at least one charge.
+        /// </summary>
+        private bool TryApplyPyrealAutoRefillBeforeSummon(Player player)
+        {
+            if (Structure != 0)
+                return true;
+
+            if (!ServerConfig.pet_device_pyreal_auto_refill_enabled.Value || !player.PetDevicePyrealAutoRefillEnrolled)
+                return false;
+
+            var cost = ServerConfig.pet_device_pyreal_auto_refill_cost_per_charge.Value;
+            if (cost < 0)
+                return false;
+
+            if (cost == 0)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    "You restore one charge on your summoning essence at no cost.",
+                    ChatMessageType.Broadcast));
+            }
+            else if (!player.TrySpendPyreals(cost))
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"You need {cost:N0} pyreals to auto-replenish your summoning essence. You do not have enough pyreals.",
+                    ChatMessageType.Broadcast));
+                return false;
+            }
+
+            Structure = 1;
+            player.UpdateProperty(this, PropertyInt.Structure, Structure.Value);
+
+            if (cost > 0)
+            {
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $"You spend {cost:N0} pyreals to restore one charge on your summoning essence.",
+                    ChatMessageType.Broadcast));
+            }
+
+            return true;
         }
 
         /// <summary>

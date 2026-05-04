@@ -38,8 +38,9 @@ namespace ACE.Server.Entity
 
             TotalDamage = totalDamage;
 
-            if (attacker is CombatPet combatPet && combatPet.P_PetOwner != null)
-                PetOwner = new WeakReference<Player>(combatPet.P_PetOwner);
+            PetOwner = attacker is CombatPet combatPet && combatPet.P_PetOwner != null
+                ? new WeakReference<Player>(combatPet.P_PetOwner)
+                : null;
         }
 
         public WorldObject TryGetAttacker()
@@ -51,6 +52,8 @@ namespace ACE.Server.Entity
 
         public Player TryGetPetOwner()
         {
+            if (PetOwner == null)
+                return null;
             PetOwner.TryGetTarget(out var petOwner);
 
             return petOwner;

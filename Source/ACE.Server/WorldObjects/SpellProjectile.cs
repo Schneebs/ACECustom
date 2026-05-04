@@ -611,6 +611,16 @@ namespace ACE.Server.WorldObjects
             {
                 ShowInfo(target, Spell, attackSkill, criticalChance, criticalHit, critDefended, overpower, weaponCritDamageMod, skillBonus, baseDamage, critDamageBonus, elementalDamageMod, slayerMod, weaponResistanceMod, resistanceMod, absorbMod, LifeProjectileDamage, lifeMagicDamage, finalDamage);
             }
+
+            // Combat pets: extra spell-only mitigation from owner's summon aug investment (does not affect melee/missile).
+            if (finalDamage > 0 && Spell.IsHarmful && target is CombatPet combatPet
+                && (!ServerConfig.pet_combat_summon_aug_spell_mitigation_players_only.Value || sourcePlayer != null))
+            {
+                var m = combatPet.GetSpellProjectileDamageTakenMultiplier();
+                if (m < 1.0f)
+                    finalDamage *= m;
+            }
+
             return finalDamage;
         }
 
@@ -869,6 +879,14 @@ namespace ACE.Server.WorldObjects
 
                 target.DamageHistory.Add(ProjectileSource, Spell.DamageType, amount);
                 // ───────────────────────────────────────────────────────────────────
+
+                if (target is CombatPet spellPet)
+                {
+                    CombatPet.TryNotifyOwnerIncomingSpell(spellPet, ProjectileSource, Spell.DamageType, amount, Spell.Name);
+                    // Spell health damage bypasses Creature.TakeDamage — arm owner-follow recall cooldown here too.
+                    if (amount > 0)
+                        spellPet.ApplyOwnerFollowRecallBlockFromDamage(amount, "SpellProjectile.health");
+                }
 
                 //if (targetPlayer != null && targetPlayer.Fellowship != null)
                     //targetPlayer.Fellowship.OnVitalUpdate(targetPlayer);
