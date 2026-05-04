@@ -753,6 +753,7 @@ namespace ACE.Server.WorldObjects
 
             var amount = 0u;
             var percent = 0.0f;
+            var mbResult = new ManaBarrierResult();
 
             var damageRatingMod = 1.0f;
             var heritageMod = 1.0f;
@@ -779,6 +780,9 @@ namespace ACE.Server.WorldObjects
             }
 
             // handle life projectiles for stamina / mana
+            float preAbsorbDamage = 0f; // set inside health block for MB messaging
+            // ILT: method-scoped locals for overkill tracking (avoids instance field thread-safety concern)
+            uint spellPreHitHealth = 0, spellRoundedDamage = 0;
             if (Spell.Category == SpellCategory.StaminaLowering)
             {
                 percent = damage / target.Stamina.MaxValue;
@@ -851,8 +855,30 @@ namespace ACE.Server.WorldObjects
                     percent = damage / target.Health.MaxValue;
                 }
 
-                amount = (uint)-target.UpdateVitalDelta(target.Health, (int)-Math.Round(damage));
+                // ILT: clear stale split arrow kill tracking before UpdateVitalDelta
+                // so the death message path sees the correct weapon type.
+                target.RemoveProperty(PropertyBool.LastHitWasSplitArrow);
+                target.RemoveProperty(PropertyInstanceId.LastSplitArrowProjectile);
+                target.RemoveProperty(PropertyInstanceId.LastSplitArrowShooter);
+
+                // ── Mana Barrier ───────────────────────────────────────────────────────
+                preAbsorbDamage = damage; // preserve for messaging
+                if (targetPlayer != null)
+                    mbResult = targetPlayer.TryAbsorbWithManaBarrier(ref damage, Spell.DamageType);
+                else if (target.HasManaBarrier)
+                    mbResult = target.TryAbsorbWithManaBarrier(ref damage, Spell.DamageType);
+
+                if (mbResult.FullyAbsorbed)
+                    amount = 0;
+                else
+                {
+                    spellPreHitHealth = (uint)Math.Max(0, target.Health.Current);
+                    amount = (uint)-target.UpdateVitalDelta(target.Health, (int)-Math.Round(damage));
+                    spellRoundedDamage = (uint)Math.Round(damage);
+                }
+
                 target.DamageHistory.Add(ProjectileSource, Spell.DamageType, amount);
+                // ───────────────────────────────────────────────────────────────────
 
                 if (target is CombatPet spellPet)
                 {
@@ -888,18 +914,24 @@ namespace ACE.Server.WorldObjects
                 var critMsg = critical ? "Critical hit! " : "";
                 var sneakMsg = sneakAttackMod > 1.0f ? "Sneak Attack! " : "";
                 var overpowerMsg = overpower ? "Overpower! " : "";
+                var mbSuffix = targetPlayer != null ? targetPlayer.GetManaBarrierSuffix(mbResult)
+                    : (mbResult.AmountAbsorbed > 0 ? $" [Barrier Remaining: {target.Mana.Current:N0}/{target.Mana.MaxValue:N0}]" : "");
+
+                // Show actual damage landed (0 when fully absorbed); mbSuffix describes what the barrier blocked.
+                var displayAmount = amount;
 
                 if (sourcePlayer != null)
                 {
                     var critProt = critDefended ? " Your critical hit was avoided with their augmentation!" : "";
+                    var amtStr = Creature.FormatDamage(displayAmount, sourcePlayer.DamageNumberFormat);
 
-                    var attackerMsg = $"{critMsg}{overpowerMsg}{sneakMsg}You {verb} {target.Name} for {amount} points with {Spell.Name}.{critProt}";
+                    var attackerMsg = $"{critMsg}{overpowerMsg}{sneakMsg}You {verb} {target.Name} for {amtStr} points with {Spell.Name}.{critProt}{mbSuffix}";
 
                     // could these crit / sneak attack?
                     if (nonHealth)
                     {
                         var vital = Spell.Category == SpellCategory.StaminaLowering ? "stamina" : "mana";
-                        attackerMsg = $"With {Spell.Name} you drain {amount} points of {vital} from {target.Name}.";
+                        attackerMsg = $"With {Spell.Name} you drain {amtStr} points of {vital} from {target.Name}.";
                     }
 
                     if (!sourcePlayer.SquelchManager.Squelches.Contains(target, ChatMessageType.Magic))
@@ -909,13 +941,14 @@ namespace ACE.Server.WorldObjects
                 if (targetPlayer != null)
                 {
                     var critProt = critDefended ? " Your augmentation allows you to avoid a critical hit!" : "";
+                    var amtStr = Creature.FormatDamage(displayAmount, targetPlayer.DamageNumberFormat);
 
-                    var defenderMsg = $"{critMsg}{overpowerMsg}{sneakMsg}{ProjectileSource.Name} {plural} you for {amount} points with {Spell.Name}.{critProt}";
+                    var defenderMsg = $"{critMsg}{overpowerMsg}{sneakMsg}{ProjectileSource.Name} {plural} you for {amtStr} points with {Spell.Name}.{critProt}{mbSuffix}";
 
                     if (nonHealth)
                     {
                         var vital = Spell.Category == SpellCategory.StaminaLowering ? "stamina" : "mana";
-                        defenderMsg = $"{ProjectileSource.Name} casts {Spell.Name} and drains {amount} points of your {vital}.";
+                        defenderMsg = $"{ProjectileSource.Name} casts {Spell.Name} and drains {amtStr} points of your {vital}.";
                     }
 
                     if (!targetPlayer.SquelchManager.Squelches.Contains(ProjectileSource, ChatMessageType.Magic))
@@ -934,6 +967,12 @@ namespace ACE.Server.WorldObjects
             else
             {
                 var lastDamager = ProjectileSource != null ? new DamageHistoryInfo(ProjectileSource) : null;
+
+                // ILT: overkill for spell kills — spell path bypasses Monster_Combat.TakeDamage.
+                // Pre-hit health and rounded damage captured as locals above before UpdateVitalDelta.
+                if (lastDamager != null && spellRoundedDamage > spellPreHitHealth)
+                    lastDamager.OverkillAmount = spellRoundedDamage - spellPreHitHealth;
+
                 target.OnDeath(lastDamager, Spell.DamageType, critical);
                 target.Die();
             }

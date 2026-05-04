@@ -53,25 +53,30 @@ namespace ACE.Server.WorldObjects
             {
                 DamageEvent damageEvent = null;
 
-                if (sourcePlayer != null)
+                // ILT: track/clear split arrow state for every projectile hit, regardless of source type
+                try
                 {
-                    // Track the last projectile that hit this creature for death message modification
-                    try
+                    var projectileIsSplitArrow = worldObject.GetProperty(PropertyBool.IsSplitArrow) == true;
+                    if (projectileIsSplitArrow && sourcePlayer != null)
                     {
-                        var projectileIsSplitArrow = worldObject.GetProperty(PropertyBool.IsSplitArrow) == true;
-                        
-                        // Always track the last projectile hit, regardless of whether it's split or main
-                        targetCreature.SetProperty(PropertyBool.IsSplitArrowKill, projectileIsSplitArrow);
+                        targetCreature.SetProperty(PropertyBool.LastHitWasSplitArrow, true);
                         targetCreature.SetProperty(PropertyInstanceId.LastSplitArrowProjectile, worldObject.Guid.Full);
                         targetCreature.SetProperty(PropertyInstanceId.LastSplitArrowShooter, sourcePlayer.Guid.Full);
-                        
-                        // Removed verbose projectile tracking logging
                     }
-                    catch (Exception ex)
+                    else if (!projectileIsSplitArrow)
                     {
-                        log.Error($"Error setting projectile tracking: {ex.Message}", ex);
+                        targetCreature.RemoveProperty(PropertyBool.LastHitWasSplitArrow);
+                        targetCreature.RemoveProperty(PropertyInstanceId.LastSplitArrowProjectile);
+                        targetCreature.RemoveProperty(PropertyInstanceId.LastSplitArrowShooter);
                     }
-                    
+                }
+                catch (Exception ex)
+                {
+                    log.Error($"Error setting projectile tracking: {ex.Message}", ex);
+                }
+
+                if (sourcePlayer != null)
+                {
                     // player damage monster or player
                     damageEvent = sourcePlayer.DamageTarget(targetCreature, worldObject);
 

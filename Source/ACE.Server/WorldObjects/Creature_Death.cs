@@ -34,7 +34,7 @@ namespace ACE.Server.WorldObjects
         public virtual DeathMessage OnDeath(DamageHistoryInfo lastDamager, DamageType damageType, bool criticalHit = false)
         {
             if (onDeathEntered)
-                return GetDeathMessage(lastDamager, damageType, criticalHit);
+                return Strings.GetDeathMessage(damageType, criticalHit); // re-entry: return without sending killer notification
 
             onDeathEntered = true;
 
@@ -82,6 +82,15 @@ namespace ACE.Server.WorldObjects
 
             var deathMessage = Strings.GetDeathMessage(damageType, criticalHit);
 
+            // ILT: always clear split arrow tracking — killer may not be a player
+            var lastHitWasSplitArrow = GetProperty(PropertyBool.LastHitWasSplitArrow) is true;
+            if (lastHitWasSplitArrow)
+            {
+                RemoveProperty(PropertyBool.LastHitWasSplitArrow);
+                RemoveProperty(PropertyInstanceId.LastSplitArrowProjectile);
+                RemoveProperty(PropertyInstanceId.LastSplitArrowShooter);
+            }
+
             // if killed by a player, send them a message
             if (lastDamagerInfo.IsPlayer)
             {
@@ -91,7 +100,17 @@ namespace ACE.Server.WorldObjects
                 var killerMsg = string.Format(deathMessage.Killer, Name);
 
                 if (lastDamager is Player playerKiller && playerKiller.Session != null)
-                    playerKiller.Session.Network.EnqueueSend(new GameEventKillerNotification(playerKiller.Session, killerMsg, Guid));
+                {
+                    // ILT: build overkill suffix — applied AFTER split arrow text transformation
+                    // inside GameEventKillerNotification, so [Overkill: N] is always last.
+                    var overkillSuffix = (playerKiller.ShowOverkill && lastDamagerInfo.OverkillAmount > 0)
+                        ? $" [Overkill: {Creature.FormatDamage(lastDamagerInfo.OverkillAmount, playerKiller.DamageNumberFormat)}]"
+                        : "";
+
+                    playerKiller.Session.Network.EnqueueSend(
+                        new GameEventKillerNotification(playerKiller.Session, killerMsg, lastHitWasSplitArrow, overkillSuffix));
+                }
+
             }
             return deathMessage;
         }

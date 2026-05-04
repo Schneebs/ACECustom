@@ -89,6 +89,24 @@ namespace ACE.Server.WorldObjects
         /// </summary>
         public bool TryCreateInInventoryWithNetworking(WorldObject item, out Container container)
         {
+            // Block duplicate ability charms — only one charm per ability allowed in inventory
+            if (item.IsAbilityCharm && item.CharmGrantsAbility.HasValue)
+            {
+                var abilityId = item.CharmGrantsAbility.Value;
+                var existing = GetAllPossessions()
+                    .FirstOrDefault(i => i.Guid != item.Guid && i.IsAbilityCharm && i.CharmGrantsAbility == abilityId && i.OwnerId != null && i.OwnerId != 0); // skip items removed by recipe but not yet GC'd
+
+                if (existing != null)
+                {
+                    var article = (!string.IsNullOrEmpty(item.Name) && "aeiouAEIOU".Contains(item.Name[0])) ? "an" : "a";
+                    Session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"You already have {article} {item.Name} in your inventory. You may only carry one at a time.",
+                        ChatMessageType.Broadcast));
+                    container = null;
+                    return false;
+                }
+            }
+
             if (!TryAddToInventory(item, out container)) // We don't have enough burden available or no empty pack slot.
                 return false;
 
@@ -116,6 +134,10 @@ namespace ACE.Server.WorldObjects
 
         public bool TryConsumeFromInventoryWithNetworking(WorldObject item, int amount = int.MaxValue)
         {
+            // Unlimited-use items (e.g. Ability Charms) are never consumed — return success without removing from inventory.
+            if (item.UnlimitedUse)
+                return true;
+
             if (amount >= (item.StackSize ?? 1))
             {
                 if (!TryRemoveFromInventory(item.Guid, out item))

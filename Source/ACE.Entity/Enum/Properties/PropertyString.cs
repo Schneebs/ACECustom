@@ -105,5 +105,10 @@ namespace ACE.Entity.Enum.Properties
         FriendTypeString = 9014,
         FoeTypeString = 9015,
         FriendlyQuestString = 9016,
+        /// <summary>
+        /// Optional custom message sent when a cast is blocked by nearby spell suppression.
+        /// Supports {school} and {source} placeholders.
+        /// </summary>
+        SpellSuppressionMessage = 9017,
     }
 }

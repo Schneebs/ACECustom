@@ -142,6 +142,7 @@ namespace ACE.Server.WorldObjects
             CurrentAttack = null;
             firstUpdate = true;
             AttackTarget = null;
+            EmoteManager.ResetSingleLocalBroadcasts();
             IsAwake = false;
             IsMoving = false;
             MonsterState = State.Idle;
@@ -824,6 +825,7 @@ namespace ACE.Server.WorldObjects
             if (MonsterState != State.Idle) return;
 
             var creatures = PhysicsObj.ObjMaint.GetVisibleTargetsValuesOfTypeCreature();
+            var woke = false;
 
             foreach (var creature in creatures)
             {
@@ -839,16 +841,23 @@ namespace ACE.Server.WorldObjects
                     continue;
                 if (!creature.Attackable)
                     continue;
-                // Don't skip players based on TargetingTactic - that's for monster behavior, not target validity
-                if (creature.TargetingTactic == TargetingTactic.None && !(creature is Player))
+
+                // Keep idle foe wake logic consistent with spawn-time/regular candidate filtering.
+                // This allows hostile non-player targets with TargetingTactic.None (e.g. spawned test creatures)
+                // to be detected when they match foe/faction rules.
+                if (!IsValidAttackCandidate(creature))
                     continue;
 
                 // ensure another faction
                 if (SameFaction(creature) && !PotentialFoe(creature))
                     continue;
 
-                // ensure within detection range
-                if (PhysicsObj.get_distance_sq_to_object(creature.PhysicsObj, true) > VisualAwarenessRangeSq)
+                var distSq = PhysicsObj.get_distance_sq_to_object(creature.PhysicsObj, true);
+                var wakeRangeSq = VisualAwarenessRangeSq;
+                if (UsesExtendedFoeTargeting && creature is not Player)
+                    wakeRangeSq = Math.Max(VisualAwarenessRangeSq, MaxChaseRangeSq);
+
+                if (distSq > wakeRangeSq)
                     continue;
 
                 if (creature is Player player)
@@ -858,15 +867,69 @@ namespace ACE.Server.WorldObjects
 
                     if (!PotentialFoe(player))
                         continue;
+
                     if (player.AlertMonster(this))
+                    {
+                        woke = true;
                         break;
+                    }
                 }
                 else
                 {
+                    // Ensure target persistence across the next monster tick:
+                    // Monster_Tick drops AttackTarget when it's not in VisibleTargets.
+                    // Retaliate entries are mirrored into VisibleTargets in ObjMaint.
+                    if (UsesExtendedFoeTargeting)
+                        AddRetaliateTarget(creature);
+
                     if (creature.AlertMonster(this))
+                    {
+                        woke = true;
                         break;
+                    }
                 }
             }
+
+            // Visibility lists can lag briefly after spawns. For custom mob-to-mob targeting, do a
+            // lightweight landblock fallback pass so newly spawned foes are still detected while idle.
+            if (!woke && UsesExtendedFoeTargeting)
+                TryWakeFromLandblockCustomFoes();
+        }
+
+        private bool TryWakeFromLandblockCustomFoes()
+        {
+            if (CurrentLandblock == null)
+                return false;
+
+            var maxFallbackRangeSq = Math.Max(VisualAwarenessRangeSq, MaxChaseRangeSq);
+
+            foreach (var wo in CurrentLandblock.GetWorldObjectsForPhysicsHandling())
+            {
+                if (wo is not Creature creature || creature == this)
+                    continue;
+                if (creature is Player || creature is CombatPet)
+                    continue;
+                if (creature.IsDead || creature.Teleporting || !creature.Attackable || creature.PhysicsObj == null)
+                    continue;
+                if (!IsValidAttackCandidate(creature))
+                    continue;
+                if (SameFaction(creature) && !PotentialFoe(creature))
+                    continue;
+
+                var distSq = PhysicsObj.get_distance_sq_to_object(creature.PhysicsObj, true);
+                if (distSq > maxFallbackRangeSq)
+                    continue;
+
+                // Keep fallback-acquired foe in our retaliate/visible tables so attack doesn't
+                // get dropped immediately by the next IsVisibleTarget gate.
+                AddRetaliateTarget(creature);
+
+                var alerted = creature.AlertMonster(this);
+                if (alerted)
+                    return true;
+            }
+
+            return false;
         }
 
         /// <summary>

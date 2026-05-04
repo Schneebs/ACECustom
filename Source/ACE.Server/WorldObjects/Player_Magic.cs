@@ -399,6 +399,126 @@ namespace ACE.Server.WorldObjects
             return true;
         }
 
+        private static SpellSuppressionSchools ToSuppressionSchool(MagicSchool school)
+        {
+            return school switch
+            {
+                MagicSchool.WarMagic => SpellSuppressionSchools.WarMagic,
+                MagicSchool.LifeMagic => SpellSuppressionSchools.LifeMagic,
+                MagicSchool.ItemEnchantment => SpellSuppressionSchools.ItemEnchantment,
+                MagicSchool.CreatureEnchantment => SpellSuppressionSchools.CreatureEnchantment,
+                MagicSchool.VoidMagic => SpellSuppressionSchools.VoidMagic,
+                _ => SpellSuppressionSchools.None
+            };
+        }
+
+        private static string GetSuppressionSchoolName(SpellSuppressionSchools school)
+        {
+            return school switch
+            {
+                SpellSuppressionSchools.WarMagic => "War Magic",
+                SpellSuppressionSchools.LifeMagic => "Life Magic",
+                SpellSuppressionSchools.ItemEnchantment => "Item Enchantment",
+                SpellSuppressionSchools.CreatureEnchantment => "Creature Enchantment",
+                SpellSuppressionSchools.VoidMagic => "Void Magic",
+                _ => "Magic"
+            };
+        }
+
+        private static double GetSpellSuppressionRadiusSq(WorldObject source)
+        {
+            var configuredRadius = source.SpellSuppressionRadius;
+            if (configuredRadius.HasValue && configuredRadius.Value > 0)
+                return configuredRadius.Value * configuredRadius.Value;
+
+            if (source is Creature creature && creature.VisualAwarenessRange > 0)
+                return creature.VisualAwarenessRangeSq;
+
+            return 0;
+        }
+
+        private static bool IsActiveSpellSuppressor(WorldObject source)
+        {
+            if (source == null || source.PhysicsObj == null)
+                return false;
+
+            if (source is Creature creature)
+            {
+                if (creature.IsDead)
+                    return false;
+
+                if (creature.IsAwake)
+                    return true;
+            }
+
+            return source.IsPassiveSpellSuppressor == true;
+        }
+
+        private bool TryGetActiveSpellSuppressor(SpellSuppressionSchools schoolFlag, out WorldObject suppressor)
+        {
+            suppressor = null;
+
+            if (schoolFlag == SpellSuppressionSchools.None || PhysicsObj?.ObjMaint == null)
+                return false;
+
+            var visibleObjects = PhysicsObj.ObjMaint.GetVisibleObjectsValuesWhere(o => o?.WeenieObj?.WorldObject != null);
+            var nearestDistSq = double.MaxValue;
+
+            foreach (var visibleObject in visibleObjects)
+            {
+                var source = visibleObject.WeenieObj.WorldObject;
+                if (source == null || source == this)
+                    continue;
+
+                if ((source.SpellSuppressionSchools & schoolFlag) == 0)
+                    continue;
+
+                if (!IsActiveSpellSuppressor(source))
+                    continue;
+
+                var suppressionRadiusSq = GetSpellSuppressionRadiusSq(source);
+                if (suppressionRadiusSq <= 0)
+                    continue;
+
+                var distSq = PhysicsObj.get_distance_sq_to_object(source.PhysicsObj, true);
+                if (distSq > suppressionRadiusSq)
+                    continue;
+
+                if (distSq < nearestDistSq)
+                {
+                    nearestDistSq = distSq;
+                    suppressor = source;
+                }
+            }
+
+            return suppressor != null;
+        }
+
+        private bool VerifySpellSchoolSuppression(Spell spell)
+        {
+            var schoolFlag = ToSuppressionSchool(spell.School);
+            if (schoolFlag == SpellSuppressionSchools.None)
+                return true;
+
+            if (!TryGetActiveSpellSuppressor(schoolFlag, out var suppressor))
+                return true;
+
+            var schoolName = GetSuppressionSchoolName(schoolFlag);
+            var msg = suppressor.SpellSuppressionMessage;
+
+            if (string.IsNullOrWhiteSpace(msg))
+                msg = $"{schoolName} is being suppressed by {suppressor.Name}.";
+            else
+            {
+                msg = msg.Replace("{school}", schoolName, StringComparison.OrdinalIgnoreCase);
+                msg = msg.Replace("{source}", suppressor.Name, StringComparison.OrdinalIgnoreCase);
+            }
+
+            Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.Magic));
+            SendUseDoneEvent(WeenieError.None);
+            return false;
+        }
+
         public bool IsValidSpell(Spell spell, bool isWeaponSpell = false)
         {
             if (spell.NotFound)
@@ -1023,6 +1143,9 @@ namespace ACE.Server.WorldObjects
             if (!IsValidSpell(spell, casterItem != null))
                 return false;
 
+            if (!VerifySpellSchoolSuppression(spell))
+                return false;
+
             if (!VerifySpellTarget(spell, target))
                 return false;
 
@@ -1162,6 +1285,9 @@ namespace ACE.Server.WorldObjects
             if (!IsValidSpell(spell))
                 return false;
 
+            if (!VerifySpellSchoolSuppression(spell))
+                return false;
+
             // get player's current magic skill
             var magicSkill = GetCreatureSkill(spell.School).Current;
 
@@ -1200,6 +1326,10 @@ namespace ACE.Server.WorldObjects
             if (SafeSpellComponents || ServerConfig.safe_spell_comps.Value)
                 return;
 
+            // ILT: Infinite Casting Stone — passive bypass while charm is in inventory
+            if (HasInfiniteCasting)
+                return;
+
             var burned = spell.TryBurnComponents(this);
             if (burned.Count == 0) return;
 
@@ -1227,6 +1357,12 @@ namespace ACE.Server.WorldObjects
 
                     continue;
                 }
+                if (item.UnlimitedUse)
+                {
+                    burned.RemoveAt(i); // don't report infinite-use items as consumed
+                    continue;
+                }
+
                 TryConsumeFromInventoryWithNetworking(item, 1);
             }
 
@@ -1246,6 +1382,10 @@ namespace ACE.Server.WorldObjects
             spell.Formula.GetPlayerFormula(this);
 
             if (!SpellComponentsRequired || !ServerConfig.require_spell_comps.Value)
+                return true;
+
+            // ILT: Infinite Casting Stone — passive bypass while charm is in inventory
+            if (HasInfiniteCasting)
                 return true;
 
             var requiredComps = spell.Formula.GetRequiredComps();

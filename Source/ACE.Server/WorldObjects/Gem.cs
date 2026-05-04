@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+
 
 using ACE.Common;
 using ACE.Entity;
@@ -132,6 +134,14 @@ namespace ACE.Server.WorldObjects
                 player.SendTransientError($"Cannot find the {Name}");   // custom message
                 return;
             }
+
+            // â”€â”€ Ability Charm Toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            if (IsAbilityCharm && CharmGrantsAbility.HasValue)
+            {
+                HandleAbilityCharmToggle(player);
+                return; // Do NOT consume the item
+            }
+            // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
             // trying to use a dispel potion while pk timer is active
             // send error message and cancel - do not consume item
@@ -312,6 +322,92 @@ namespace ACE.Server.WorldObjects
             }
 
             base.OnActivate(activator);
+        }
+        private void HandleAbilityCharmToggle(Player player)
+        {
+            var abilityId = CharmGrantsAbility!.Value;
+            var abilityName = CharmAbilityRegistry.GetDisplayName(abilityId) ?? Name;
+
+            if (!IsCharmActivated)
+            {
+                // Guard: only one charm per ability may be active at a time
+                var duplicate = player.GetAllPossessions()
+                    .FirstOrDefault(i => i.Guid != Guid
+                        && i.IsAbilityCharm
+                        && i.CharmGrantsAbility == abilityId
+                        && i.IsCharmActivated);
+
+                if (duplicate != null)
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                        $"You already have a {abilityName} charm active. Deactivate it first.",
+                        ChatMessageType.Broadcast));
+                    return;
+                }
+
+                // Activate
+                IsCharmActivated = true;
+                CharmAbilityRegistry.Apply(player, abilityId, true, CharmLevel ?? 1);
+
+                // ILT: Infinite Casting â€” tell the client comps are no longer required
+                if (abilityId == CharmAbilityRegistry.InfiniteCastingAbilityId)
+                {
+                    player.SpellComponentsRequired = false;
+                    player.Session.Network.EnqueueSend(new GameMessagePublicUpdatePropertyBool(player, PropertyBool.SpellComponentsRequired, false));
+                }
+
+                var activateMsg = BuildActivationMessage(abilityId, CharmLevel ?? 1, true);
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(activateMsg, ChatMessageType.Broadcast));
+                player.Session.Network.EnqueueSend(new GameMessageSound(player.Guid, Sound.HealthUp, 1.0f));
+            }
+            else
+            {
+                // Deactivate
+                IsCharmActivated = false;
+                CharmAbilityRegistry.Apply(player, abilityId, false);
+
+                // ILT: Infinite Casting â€” restore client comp requirement
+                if (abilityId == CharmAbilityRegistry.InfiniteCastingAbilityId)
+                {
+                    player.SpellComponentsRequired = true;
+                    player.Session.Network.EnqueueSend(new GameMessagePublicUpdatePropertyBool(player, PropertyBool.SpellComponentsRequired, true));
+                }
+
+                var deactivateMsg = BuildActivationMessage(abilityId, CharmLevel ?? 1, false);
+                player.Session.Network.EnqueueSend(new GameMessageSystemChat(deactivateMsg, ChatMessageType.Broadcast));
+                player.Session.Network.EnqueueSend(new GameMessageSound(player.Guid, Sound.ShieldDown, 1.0f));
+            }
+
+            SaveBiotaToDatabase();
+            player.SaveBiotaToDatabase(enqueueSave: true);
+        }
+
+        private static string BuildActivationMessage(int abilityId, int level, bool activating)
+        {
+            if (abilityId == CharmAbilityRegistry.ManaBarrierAbilityId)
+            {
+                if (activating)
+                {
+                    return level switch
+                    {
+                        1 => "Mana Barrier Level I activated. Your Mana will absorb incoming damage at a 1:1 ratio.",
+                        2 => "Mana Barrier Level II activated. Your Mana will absorb incoming damage at a 1.5:1 ratio.",
+                        3 => "Mana Barrier Level III activated. Your Mana will absorb incoming damage at a 2:1 ratio.",
+                        _ => $"Mana Barrier Level {level} activated."
+                    };
+                }
+                return $"Mana Barrier Level {level} deactivated. Your Mana is no longer absorbing damage.";
+            }
+
+            if (abilityId == CharmAbilityRegistry.InfiniteCastingAbilityId) // Infinite Casting Stone
+            {
+                return activating
+                    ? "Infinite Casting Stone activated. Spells will be cast without consuming components."
+                    : "Infinite Casting Stone deactivated. Spell components will be consumed normally.";
+            }
+
+            var name = CharmAbilityRegistry.GetDisplayName(abilityId) ?? "Ability";
+            return activating ? $"{name} Level {level} activated." : $"{name} deactivated.";
         }
     }
 }

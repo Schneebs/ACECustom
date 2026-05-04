@@ -269,8 +269,12 @@ namespace ACE.Entity.Enum.Properties
         [AssessmentProperty]
         DamageCapMultiplier = 9045,
         /// <summary>
+        /// Optional radius for spell suppression zones. When <= 0 or unset, creatures fall back to VisualAwarenessRange.
+        /// </summary>
+        SpellSuppressionRadius = 9046,
+        /// <summary>
         /// Monster capture: ObjScale normalized to ~1.5m physical height for combat pet summons (parallel to CapturedScale at ~0.75m).
         /// </summary>
-        CapturedScaleCombatPet = 9046,
+        CapturedScaleCombatPet = 9047,
     }
 }
