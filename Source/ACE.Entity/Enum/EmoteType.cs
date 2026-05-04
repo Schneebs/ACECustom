@@ -156,6 +156,7 @@ namespace ACE.Entity.Enum
         InqPetRegistryCount           = 151, //Custom - Check pet registry count (uses min/max)
         InqPetRegistryCreatureType    = 152, //Custom - Check if account has any pet of creature type (uses stat field)
         JailPlayer                    = 153, //Custom - Jails (amount=1) or releases (amount=0) a player
+        SingleLocalBroadcast          = 154, //Custom - LocalBroadcast that emits once per awake cycle
 
         // Unknown Id Emotes & Custom Emotes
         Enlightenment                 = 9001

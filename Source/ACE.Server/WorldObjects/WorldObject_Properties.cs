@@ -2075,6 +2075,59 @@ namespace ACE.Server.WorldObjects
             set { if (string.IsNullOrEmpty(value)) RemoveProperty(PropertyString.FriendlyQuestString); else SetProperty(PropertyString.FriendlyQuestString, value); }
         }
 
+        /// <summary>
+        /// Bitmask of spell schools this creature suppresses for nearby players.
+        /// </summary>
+        public SpellSuppressionSchools SpellSuppressionSchools
+        {
+            get => (SpellSuppressionSchools)(GetProperty(PropertyInt.SpellSuppressionSchools) ?? 0);
+            set { if (value == SpellSuppressionSchools.None) RemoveProperty(PropertyInt.SpellSuppressionSchools); else SetProperty(PropertyInt.SpellSuppressionSchools, (int)value); }
+        }
+
+        /// <summary>
+        /// If TRUE, this source suppresses configured spell schools even when not awake/aggro.
+        /// </summary>
+        public bool? IsPassiveSpellSuppressor
+        {
+            get => GetProperty(PropertyBool.IsPassiveSpellSuppressor);
+            set { if (!value.HasValue) RemoveProperty(PropertyBool.IsPassiveSpellSuppressor); else SetProperty(PropertyBool.IsPassiveSpellSuppressor, value.Value); }
+        }
+
+        /// <summary>
+        /// Optional suppression radius for this source. For creatures, unset or non-positive falls back to VisualAwarenessRange.
+        /// </summary>
+        public double? SpellSuppressionRadius
+        {
+            get => GetProperty(PropertyFloat.SpellSuppressionRadius);
+            set
+            {
+                if (!value.HasValue || value.Value <= 0 || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+                    RemoveProperty(PropertyFloat.SpellSuppressionRadius);
+                else
+                    SetProperty(PropertyFloat.SpellSuppressionRadius, value.Value);
+            }
+        }
+
+        /// <summary>
+        /// Optional custom message shown to players when a nearby suppression source blocks a spell cast.
+        /// Supports {school} and {source} placeholders.
+        /// </summary>
+        public string SpellSuppressionMessage
+        {
+            get
+            {
+                var v = GetProperty(PropertyString.SpellSuppressionMessage);
+                return string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+            }
+            set
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                    RemoveProperty(PropertyString.SpellSuppressionMessage);
+                else
+                    SetProperty(PropertyString.SpellSuppressionMessage, value.Trim());
+            }
+        }
+
         public bool? AllowFriendlyPlayerDamage
         {
             get => GetProperty(PropertyBool.AllowFriendlyPlayerDamage);
@@ -3306,7 +3359,74 @@ namespace ACE.Server.WorldObjects
         /// If not unlimited, client will only allow you to buy or add to buy list up this number of items for a single transaction.
         /// </summary>
         public int? VendorShopCreateListStackSize;
+
+        // ── ILT Ability Charm System ──────────────────────────────────────────────────
+        public int? CharmGrantsAbility
+        {
+            get => GetProperty(PropertyInt.CharmGrantsAbility);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.CharmGrantsAbility); else SetProperty(PropertyInt.CharmGrantsAbility, value.Value); }
+        }
+
+        public int? CharmLevel
+        {
+            get => GetProperty(PropertyInt.CharmLevel);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.CharmLevel); else SetProperty(PropertyInt.CharmLevel, value.Value); }
+        }
+
+        public int? ActiveCharmLevel
+        {
+            get => GetProperty(PropertyInt.ActiveCharmLevel);
+            set { if (!value.HasValue) RemoveProperty(PropertyInt.ActiveCharmLevel); else SetProperty(PropertyInt.ActiveCharmLevel, value.Value); }
+        }
+
+        /// <summary>True if this item is an ability-granting charm.</summary>
+        public bool IsAbilityCharm
+        {
+            get => GetProperty(PropertyBool.IsAbilityCharm) ?? false;
+            set { if (!value) RemoveProperty(PropertyBool.IsAbilityCharm); else SetProperty(PropertyBool.IsAbilityCharm, value); }
+        }
+
+        /// <summary>True when this charm has been activated (ability granted to player).</summary>
+        public bool IsCharmActivated
+        {
+            get => GetProperty(PropertyBool.IsCharmActivated) ?? false;
+            set { if (!value) RemoveProperty(PropertyBool.IsCharmActivated); else SetProperty(PropertyBool.IsCharmActivated, value); }
+        }
+
+        /// <summary>True for limited trial charms that expire after use.</summary>
+        public bool IsTestCharm
+        {
+            get => GetProperty(PropertyBool.IsTestCharm) ?? false;
+            set { if (!value) RemoveProperty(PropertyBool.IsTestCharm); else SetProperty(PropertyBool.IsTestCharm, value); }
+        }
+
+        public bool HasManaBarrier
+        {
+            get => GetProperty(PropertyBool.HasManaBarrier) ?? false;
+            set { if (!value) RemoveProperty(PropertyBool.HasManaBarrier); else SetProperty(PropertyBool.HasManaBarrier, value); }
+        }
+
+        public bool HasInfiniteCasting
+        {
+            get => GetProperty(PropertyBool.HasInfiniteCasting) ?? false;
+            set { if (!value) RemoveProperty(PropertyBool.HasInfiniteCasting); else SetProperty(PropertyBool.HasInfiniteCasting, value); }
+        }
+
+        /// <summary>Show [Overkill] suffix on kill and death messages. Default ON.</summary>
+        public bool ShowOverkill
+        {
+            get => GetProperty(PropertyBool.ShowOverkill) ?? true;
+            // Default is ON: removing the row lets the getter fall back to ?? true.
+            // SetProperty is only needed when the player turns it OFF (value = false).
+            set { if (value) RemoveProperty(PropertyBool.ShowOverkill); else SetProperty(PropertyBool.ShowOverkill, false); }
+        }
+
+        // ── ILT Player UI Preferences ────────────────────────────────────────────────
+        /// <summary>0 = default (vanilla), 1 = commas, 2 = short (K/M/B/T/Q)</summary>
+        public int DamageNumberFormat
+        {
+            get => GetProperty(PropertyInt.DamageNumberFormat) ?? 0;
+            set { if (value == 0) RemoveProperty(PropertyInt.DamageNumberFormat); else SetProperty(PropertyInt.DamageNumberFormat, value); }
+        }
     }
 }
-
-
