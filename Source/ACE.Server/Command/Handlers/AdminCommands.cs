@@ -3079,6 +3079,28 @@ namespace ACE.Server.Command.Handlers
                 session.Network.EnqueueSend(new GameMessageSystemChat($"You don't know that spell!", ChatMessageType.Broadcast));
         }
 
+        [CommandHandler("spellicon", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 1,
+            "Prints the icon DID for a spell (useful for setting charm inventory icons).",
+            "<spellId>")]
+        public static void HandleSpellIcon(Session session, params string[] parameters)
+        {
+            if (!uint.TryParse(parameters[0], out var spellId))
+            {
+                session.Player.SendMessage($"Invalid spell id: {parameters[0]}");
+                return;
+            }
+
+            var spell = new Entity.Spell(spellId, false);
+            if (spell._spellBase == null)
+            {
+                session.Player.SendMessage($"Spell {spellId} not found.");
+                return;
+            }
+
+            var icon = spell._spellBase.Icon;
+            session.Player.SendMessage($"{spell.Name} (id {spellId}): Icon = 0x{icon:X8} ({icon})");
+        }
+
         // adminhouse
         [CommandHandler("adminhouse", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 0, "House management tools for admins.")]
         public static void HandleAdminhouse(Session session, params string[] parameters)
@@ -6851,6 +6873,50 @@ namespace ACE.Server.Command.Handlers
         public static void HandleDisplayProps(Session session, params string[] parameters)
         {
             CommandHandlerHelper.WriteOutputInfo(session, ServerConfig.DebugString());
+        }
+
+        [CommandHandler("petserverconfig", AccessLevel.Admin, CommandHandlerFlag.None, 0, "Lists effective ServerConfig values for pet_*, damage_event_debug*, and mob_awareness_range (with /modify* lines for prod replication)")]
+        public static void HandlePetServerConfigDump(Session session, params string[] parameters)
+        {
+            var text = ServerConfig.CombatPetRelatedServerConfigDump();
+            // Long system chat strings render poorly in the AC client; split on line boundaries.
+            const int maxChunkLen = 3200;
+            if (session == null || text.Length <= maxChunkLen)
+            {
+                CommandHandlerHelper.WriteOutputInfo(session, text);
+                return;
+            }
+
+            var chunk = new System.Text.StringBuilder();
+            foreach (var rawLine in text.Split('\n'))
+            {
+                var line = rawLine.TrimEnd('\r');
+                if (line.Length > maxChunkLen)
+                {
+                    if (chunk.Length > 0)
+                    {
+                        CommandHandlerHelper.WriteOutputInfo(session, chunk.ToString());
+                        chunk.Clear();
+                    }
+                    for (var i = 0; i < line.Length; i += maxChunkLen)
+                    {
+                        var take = Math.Min(maxChunkLen, line.Length - i);
+                        CommandHandlerHelper.WriteOutputInfo(session, line.Substring(i, take));
+                    }
+                    continue;
+                }
+
+                var add = chunk.Length == 0 ? line : "\n" + line;
+                if (chunk.Length + add.Length > maxChunkLen && chunk.Length > 0)
+                {
+                    CommandHandlerHelper.WriteOutputInfo(session, chunk.ToString());
+                    chunk.Clear();
+                    add = line;
+                }
+                chunk.Append(add);
+            }
+            if (chunk.Length > 0)
+                CommandHandlerHelper.WriteOutputInfo(session, chunk.ToString());
         }
 
         [CommandHandler("modifybool", AccessLevel.Admin, CommandHandlerFlag.None, 2, "Modifies a server property that is a bool", "modifybool (string) (bool)")]

@@ -81,6 +81,13 @@ namespace ACE.Server.WorldObjects
 
             if (IsDead) return;
 
+            // Engaged combat pets skip Pet.SlowTick; apply the same max owner distance despawn as idle pets (~1 Hz).
+            // Include State.Return (pet walking home with no AttackTarget) so returning pets are not exempt from despawn.
+            if (this is CombatPet engagedRangePet
+                && (engagedRangePet.AttackTarget != null || engagedRangePet.MonsterState == State.Return)
+                && engagedRangePet.TryDespawnIfOwnerBeyondMaxFollowThrottled(currentUnixTime))
+                return;
+
             if (EmoteManager.IsBusy) return;
 
             // Owner leash while engaged: monster AI never runs Pet follow while AttackTarget is set; if the owner walks away, drop target so idle follow runs.
@@ -104,6 +111,19 @@ namespace ACE.Server.WorldObjects
                     HandleFindTarget();
                     return;
                 }
+            }
+
+            // Hard leash radius (independent of idle-follow toggle): if configured, drop target when pet strays too far from owner.
+            if (this is CombatPet hardLeashPet
+                && ServerConfig.pet_combat_leash_radius_m.Value > 0
+                && hardLeashPet.AttackTarget != null
+                && hardLeashPet.P_PetOwner?.PhysicsObj != null
+                && hardLeashPet.GetCylinderDistance(hardLeashPet.P_PetOwner) > (float)ServerConfig.pet_combat_leash_radius_m.Value)
+            {
+                hardLeashPet.AttackTarget = null;
+                hardLeashPet.ResetAttack();
+                ((Pet)hardLeashPet).Tick(currentUnixTime);
+                return;
             }
 
             // Idle combat pets: use the same Pet.Tick path as passive pets (physics cadence + SlowTick recall),

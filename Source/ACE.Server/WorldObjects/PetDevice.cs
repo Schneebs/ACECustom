@@ -183,8 +183,8 @@ namespace ACE.Server.WorldObjects
             if (bondedCharacterId.HasValue && owner != null && bondedCharacterId.Value != (long)owner.Character.Id)
                 return false;
 
-            var levelCap = (int)ServerConfig.pet_bond_level_cap.Value;
-            if (levelCap < 1) levelCap = 1;
+            var levelCapRaw = (int)ServerConfig.pet_bond_level_cap.Value;
+            var levelCap = levelCapRaw <= 0 ? int.MaxValue : Math.Max(1, levelCapRaw);
 
             var level = PetBondLevel.GetValueOrDefault(1);
             if (level < 1) level = 1;
@@ -243,6 +243,12 @@ namespace ACE.Server.WorldObjects
         {
             get => GetProperty(PropertyDataId.VisualOverrideMotionTable);
             set { if (!value.HasValue) RemoveProperty(PropertyDataId.VisualOverrideMotionTable); else SetProperty(PropertyDataId.VisualOverrideMotionTable, value.Value); }
+        }
+
+        public uint? VisualOverrideCombatTable
+        {
+            get => GetProperty(PropertyDataId.VisualOverrideCombatTable);
+            set { if (!value.HasValue) RemoveProperty(PropertyDataId.VisualOverrideCombatTable); else SetProperty(PropertyDataId.VisualOverrideCombatTable, value.Value); }
         }
 
         public uint? VisualOverrideSoundTable
@@ -347,12 +353,58 @@ namespace ACE.Server.WorldObjects
         {
         }
 
-        protected override bool ShouldApplyActivationCooldown(Player player)
-        {
-            if (ServerConfig.pet_summon_cooldown_on_pet_death_only.Value && IsCombatPetDevice())
-                return false;
+        /// <summary>
+        /// Base <see cref="WorldObject.OnActivate"/> starts item cooldown before <see cref="ActOnUse"/>, which charged
+        /// cooldown on failed spawns, stow-only activations, and retail two-click passive flow. Pet devices defer
+        /// cooldown until <see cref="SummonCreature"/> completes with success. When
+        /// <see cref="ServerConfig.pet_summon_cooldown_on_pet_death_only"/> is enabled for combat pets, cooldown is
+        /// applied from <see cref="CombatPet.Die"/> only — not on summon.
+        /// When <see cref="ServerConfig.pet_combat_summon_skips_shared_cooldown"/> is enabled for combat pets, no
+        /// SharedCooldown is started on summon; combat pings and death handle timing instead.
+        /// </summary>
+        protected override bool ShouldApplyActivationCooldown(Player player) => false;
 
-            return base.ShouldApplyActivationCooldown(player);
+        /// <summary>
+        /// Upper bound (seconds) for this essence's SharedCooldown timers from combat refresh or death.
+        /// Uses <see cref="PropertyFloat.CooldownDuration"/> when positive; otherwise 45s default.
+        /// </summary>
+        public static float GetEssenceSharedCooldownCapSeconds(PetDevice device)
+        {
+            if (device == null)
+                return 0f;
+
+            var d = device.CooldownDuration;
+            if (d.HasValue && d.Value > 0)
+                return (float)d.Value;
+
+            return 45f;
+        }
+
+        private void TryApplySummonActivationCooldown(Player player)
+        {
+            if (player?.EnchantmentManager == null || CooldownId == null)
+                return;
+
+            if (ServerConfig.pet_summon_cooldown_on_pet_death_only.Value && IsCombatPetDevice())
+                return;
+
+            if (ServerConfig.pet_combat_summon_skips_shared_cooldown.Value && IsCombatPetDevice())
+                return;
+
+            // Optional global override: let combat pet essences have a short shared cooldown on summon
+            // without editing each device's CooldownDuration in the DB. Death cooldown is handled elsewhere.
+            if (IsCombatPetDevice())
+            {
+                var overrideSeconds = (float)ServerConfig.pet_combat_summon_initial_shared_cooldown_seconds.Value;
+                if (overrideSeconds > 0)
+                {
+                    var cap = GetEssenceSharedCooldownCapSeconds(this);
+                    var duration = cap > 0 ? Math.Min(overrideSeconds, cap) : overrideSeconds;
+                    player.EnchantmentManager.StartOrRefreshItemCooldown(Guid.Full, CooldownId.Value, duration);
+                    return;
+                }
+            }
+            player.EnchantmentManager.StartCooldown(this);
         }
 
         /// <summary>
@@ -508,6 +560,8 @@ namespace ACE.Server.WorldObjects
 
                     player.Session.Network.EnqueueSend(new GameMessagePublicUpdatePropertyInt(this, PropertyInt.Structure, Structure.Value));
                 }
+
+                TryApplySummonActivationCooldown(player);
             }
             else
             {
@@ -595,6 +649,17 @@ namespace ACE.Server.WorldObjects
 
                 if (VisualOverrideMotionTable.HasValue)
                     pet.MotionTableId = VisualOverrideMotionTable.Value;
+
+                if (VisualOverrideCombatTable.HasValue)
+                {
+                    if (VisualOverrideCombatTable.Value > 0)
+                    {
+                        pet.CombatTableDID = VisualOverrideCombatTable.Value;
+                        pet.GetCombatTable();
+                    }
+                    else
+                        log.Warn($"{nameof(SummonCreature)}: {nameof(VisualOverrideCombatTable)} is 0 for device {Name} ({Guid}) — skipping combat table override.");
+                }
 
                 if (VisualOverrideSoundTable.HasValue)
                     pet.SoundTableId = VisualOverrideSoundTable.Value;
