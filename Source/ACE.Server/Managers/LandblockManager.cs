@@ -660,7 +660,7 @@ namespace ACE.Server.Managers
             if (traverse)
             {
                 foreach (var adjacent in landblock.Adjacents)
-                    SetAdjacents(adjacent, false);
+                    SetAdjacents(adjacent, false, pSync);
             }
         }
 
