@@ -4,7 +4,7 @@ import logo from '../../assets/logo.svg'
 
 export default function PatchNotesPublicShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col">
+    <div className="h-screen bg-neutral-950 text-neutral-100 flex flex-col overflow-hidden">
       <header className="shrink-0 border-b border-neutral-800 bg-neutral-900/80 backdrop-blur-xl">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
           <Link to="/patch-notes" className="flex items-center gap-3">
@@ -19,7 +19,7 @@ export default function PatchNotesPublicShell({ children }: { children: ReactNod
           </Link>
         </div>
       </header>
-      <main className="flex-1 max-w-4xl w-full mx-auto px-6 py-8">{children}</main>
+      <main className="flex-1 flex flex-col min-h-0 overflow-hidden max-w-4xl w-full mx-auto">{children}</main>
     </div>
   )
 }
