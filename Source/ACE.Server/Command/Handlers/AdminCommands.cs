@@ -7701,7 +7701,7 @@ namespace ACE.Server.Command.Handlers
         }
 
         // blacklist {subcommand} {parameters}
-        [CommandHandler("blacklist", AccessLevel.Admin, CommandHandlerFlag.RequiresWorld, 1,
+        [CommandHandler("blacklist", AccessLevel.Developer, CommandHandlerFlag.RequiresWorld, 1,
             "Manage creature capture and shiny blacklists.",
             "add <wcid> capture|shiny|both [reason] - Add WCID to blacklist\n" +
             "remove <wcid> [capture|shiny] - Remove WCID from blacklist\n" +
