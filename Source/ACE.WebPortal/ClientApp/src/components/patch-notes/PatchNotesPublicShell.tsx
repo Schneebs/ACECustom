@@ -19,7 +19,7 @@ export default function PatchNotesPublicShell({ children }: { children: ReactNod
           </Link>
         </div>
       </header>
-      <main className="flex-1 flex flex-col min-h-0 overflow-hidden max-w-4xl w-full mx-auto">{children}</main>
+      <main className="flex-1 flex flex-col min-h-0 overflow-hidden w-full">{children}</main>
     </div>
   )
 }
