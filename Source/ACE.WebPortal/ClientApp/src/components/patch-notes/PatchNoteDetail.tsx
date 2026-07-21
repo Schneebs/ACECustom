@@ -53,16 +53,18 @@ export default function PatchNoteDetail() {
   }
 
   return (
-    <article className="space-y-6 animate-in fade-in duration-500">
-      <Link to="/patch-notes" className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300">
-        <ArrowLeft className="w-4 h-4" /> All patch notes
-      </Link>
-      <header>
-        <h1 className="text-3xl font-black text-white tracking-tight mb-2">{note.title}</h1>
-        <p className="text-sm text-neutral-500">Published {formatDate(note.publishedAt)}</p>
-        {note.summary && <p className="mt-4 text-neutral-400 text-lg">{note.summary}</p>}
-      </header>
-      <PatchNotesBody body={note.body} />
-    </article>
+    <div className="flex-1 overflow-y-auto custom-scrollbar px-6 py-8">
+      <article className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500 w-full">
+        <Link to="/patch-notes" className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300">
+          <ArrowLeft className="w-4 h-4" /> All patch notes
+        </Link>
+        <header>
+          <h1 className="text-3xl font-black text-white tracking-tight mb-2">{note.title}</h1>
+          <p className="text-sm text-neutral-500">Published {formatDate(note.publishedAt)}</p>
+          {note.summary && <p className="mt-4 text-neutral-400 text-lg">{note.summary}</p>}
+        </header>
+        <PatchNotesBody body={note.body} />
+      </article>
+    </div>
   )
 }
